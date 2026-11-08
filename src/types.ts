@@ -1,0 +1,12 @@
+import type { Locale } from './i18n';
+export type ResponseValue = 'yes' | 'no' | 'maybe';
+export type PresenceMode = 'online'|'away'|'dnd'|'invisible';
+export type PresenceStatus = 'online'|'away'|'dnd'|'offline';
+export type Customization = {avatar:'mint'|'lavender'|'stone'|'sunset';theme:'meadow'|'forest'|'dusk';palette:'sage'|'white'|'sand'|'cocoa';tagline:string;defaultView:'month'|'week'|'schedule';reducedMotion:boolean;compactCalendar:boolean};
+export type User = { id: string; name: string; locale: Locale; email?: string; emailVerified?: boolean; username?: string; connectedProviders?: Provider['id'][]; customization?:Customization; presence?:{mode:PresenceMode;status:PresenceStatus}; contacts?: {telegram?:string;whatsapp?:string;signal?:string} };
+export type Group = { id: string; name: string; emoji: string; color: string; inviteCode: string; memberCount: number; createdBy: string; members: { id: string; name: string; username?:string; avatar?:Customization['avatar']; presence?:PresenceStatus; contacts?:{telegram?:string;whatsapp?:string;signal?:string} }[] };
+export type CalendarEvent = { id: string; groupId: string; title: string; date: string; startTime: string; endTime: string; location: string; notes: string; createdBy: string; responses: Record<string, ResponseValue> };
+export type DayAvailability = {groupId:string;userId:string;date:string;value:ResponseValue;time:string|null;note:string;updatedAt:number};
+export type Snapshot = { user: User; groups: Group[]; events: CalendarEvent[]; availability?:DayAvailability[] };
+export type EventInput = Omit<CalendarEvent, 'id' | 'createdBy' | 'responses'>;
+export type Provider = { id: 'google' | 'apple' | 'microsoft' | 'telegram'; configured: boolean };

@@ -1,0 +1,23 @@
+[package]
+name = "opencalendar-desktop"
+version = "0.3.3"
+description = "OpenCalendar desktop client"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "=2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.5", features = [] }
+tauri-plugin-deep-link = "=2.6.3"
+tauri-plugin-opener = "=2.7.2"
+tauri-plugin-dialog = "=2.8.4"
+tauri-plugin-fs = "=2.7.1"
+tauri-plugin-clipboard-manager = "=2.5.0"
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1

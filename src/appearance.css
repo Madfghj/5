@@ -1,0 +1,27 @@
+:root{--app-accent:#214c3d;--app-ink:#283d34;--app-paper:#fff;--app-canvas:#f7f8f5;--app-line:#dbe3d3}
+:root[data-palette="white"]{--app-accent:#334155;--app-ink:#24313e;--app-paper:#fff;--app-canvas:#f6f7f9;--app-line:#dce1e7}
+:root[data-palette="sand"]{--app-accent:#735a30;--app-ink:#403520;--app-paper:#fffdf7;--app-canvas:#f6f0e3;--app-line:#e1d7c2}
+:root[data-palette="cocoa"]{--app-accent:#68412d;--app-ink:#3b2b21;--app-paper:#fff9f0;--app-canvas:#ede0cf;--app-line:#d8c5ad}
+:root{--green:var(--app-accent)}
+body,.app-shell{color:var(--app-ink);background:var(--app-canvas)}
+.sidebar,.modal,.topbar,.group-card,.calendar-panel,.mobile-bottom{background-color:var(--app-paper);border-color:var(--app-line)}
+.button.primary,.auth-submit,.mobile-bottom .mobile-add{background:var(--app-accent);border-color:var(--app-accent);color:#fff}
+.button.primary:hover:not(:disabled),.auth-submit:hover:not(:disabled){filter:brightness(1.08)}
+.page-heading h1,.section-heading h3,.modal-header h2,.group-card h2,.day-answer-fieldset legend,.customization h3{color:var(--app-ink)}
+.group-member-count{color:#53684f;font-size:12px;line-height:1.6}
+.workspace-tagline{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;margin-top:5px;color:#62745a;font-size:12px;line-height:1.5}
+.avatar>svg{width:100%;height:100%;padding:2px;border-radius:inherit}
+.services-button{min-width:40px;min-height:40px;color:var(--app-accent)}
+.presence-dnd,.day-presence-dnd{background:#b6534d}
+.advanced-settings>.presence-control{padding-bottom:20px;border-bottom:1px solid var(--app-line)}
+.advanced-settings>.button{margin-top:22px}
+.advanced-contact-settings{margin-top:22px;padding:14px 0;border-top:1px solid var(--app-line);font-size:13px;color:#53684f}
+.advanced-contact-settings>summary{cursor:pointer;min-height:30px;padding:5px 0}
+.advanced-contact-settings .contacts-form{border:0;margin-top:8px}
+.month-navigation h2{text-transform:none}.month-navigation h2::first-letter{text-transform:uppercase}
+.calendar-footer,.calendar-footer>span{font-size:12px;line-height:1.7;font-family:inherit;letter-spacing:0}
+:root[data-density="compact"] .quick-day-cell{min-height:78px}
+:root[data-density="compact"] .calendar-toolbar{padding-top:12px;padding-bottom:12px}
+:root[data-motion="reduced"] *,:root[data-motion="reduced"] *::before,:root[data-motion="reduced"] *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+@media(max-width:520px){.calendar-footer,.calendar-footer>span{font-size:11px}:root[data-density="compact"] .quick-day-cell{min-height:46px}.workspace-tagline{font-size:12px}}
+:root{--app-tint:#eaf1e3}:root[data-palette="white"]{--app-tint:#edf0f4}:root[data-palette="sand"]{--app-tint:#efe6d1}:root[data-palette="cocoa"]{--app-tint:#e8d7c5}.primary-nav button.active,.group-nav>button.group-active,.selected-day{background-color:var(--app-tint);color:var(--app-accent)}.today-number{background:var(--app-accent)}.dashboard-layout.day-first{grid-template-columns:minmax(0,1fr)}.workspace-icon{background:transparent;border:0;overflow:visible}.workspace-icon>.avatar{width:36px;height:36px}.services-button{display:flex;gap:7px;width:auto;padding:5px 9px}.services-label{font-size:12px}.create-group-card{min-height:250px}@media(max-width:520px){.services-label{display:none}.services-button{padding:5px;min-width:36px}.create-group-card{min-height:220px}}

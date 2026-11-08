@@ -1,0 +1,116 @@
+.day-availability {
+  --day-sage: #eaf2de;
+  --day-sage-line: #b9cea3;
+  --day-sage-ink: #456e36;
+}
+
+.day-availability .day-availability-group-select { margin-bottom: 23px; }
+.day-availability-group {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 23px;
+  padding: 10px 12px;
+  border: 1px solid #e3e9d9;
+  border-radius: 6px;
+  background: #f7f9f2;
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.day-availability-group > span { font-size: 17px; flex-shrink: 0; }
+.day-answer-fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
+.day-answer-fieldset legend {
+  padding: 0;
+  margin-bottom: 14px;
+  font: 700 19px/1.45 var(--heading);
+  letter-spacing: -.45px;
+  color: #304a39;
+}
+.day-answer-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.day-answer-choice {
+  min-width: 0;
+  min-height: 76px;
+  padding: 12px 6px 10px;
+  border: 1px solid #e0e6d9;
+  border-bottom-width: 3px;
+  border-radius: 7px;
+  background: #fff;
+  color: #73816a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  transition: background .15s, border-color .15s;
+}
+.day-answer-choice:hover:not(:disabled) { background: #f5f8ef; border-color: #cbd9bc; }
+.day-answer-choice:focus-visible,
+.day-availability-clear:focus-visible { outline: 3px solid #b9d29c; outline-offset: 3px; }
+.day-answer-symbol { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 3px; background: #f2f5ec; }
+.day-answer-question { font: 700 17px/1 var(--mono); }
+.day-answer-yes.is-selected { background: var(--day-sage); border-color: var(--day-sage-line); color: var(--day-sage-ink); }
+.day-answer-yes.is-selected .day-answer-symbol { background: #d9e9c7; }
+.day-answer-maybe.is-selected { background: #f9f2df; border-color: #dfcd99; color: #8c7130; }
+.day-answer-maybe.is-selected .day-answer-symbol { background: #f0e3ba; }
+.day-answer-no.is-selected { background: #fbefeb; border-color: #e2bfb4; color: #a16b5e; }
+.day-answer-no.is-selected .day-answer-symbol { background: #f3dcd3; }
+.day-answer-fieldset:disabled .day-answer-choice { cursor: wait; }
+.day-availability-hint { margin: 11px 0 24px; color: #85917a; font-size: 11px; line-height: 1.6; }
+.day-availability .field > span { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.day-availability .field > span > small { color: #98a08f; font-size: 10px; font-weight: 400; }
+.day-availability .day-availability-time { margin-bottom: 18px; }
+.day-availability-range { display: block; margin-top: 6px; color: #8f9c82; font: 9px var(--mono); letter-spacing: .3px; }
+.day-availability .day-availability-note { margin-bottom: 20px; }
+.day-availability-note textarea { min-height: 76px; max-height: 200px; resize: vertical; }
+.day-availability-save { min-height: 44px; }
+.day-availability-clear { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; margin: 8px auto -3px; padding: 8px 12px; color: #87917e; font-size: 10px; border-radius: 5px; }
+.day-availability-clear:hover:not(:disabled) { color: #9e6d5f; background: #faf2ee; }
+.day-availability-people { margin-top: 27px; border-top: 1px solid #e7ebdf; padding-top: 22px; }
+.day-availability-people-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; }
+.day-availability-people-heading h3 { margin: 0; font: 650 12px/1.6 var(--heading); }
+.day-availability-people-heading > span { font: 9px var(--mono); padding: 3px 5px; border-radius: 3px; color: #8d9e7d; background: #eff4e7; }
+.day-availability-people ul { list-style: none; padding: 0; margin: 0; }
+.day-person { display: flex; align-items: flex-start; gap: 10px; padding: 13px 0; border-bottom: 1px solid #edf0e8; }
+.day-person:last-child { border-bottom: 0; padding-bottom: 0; }
+.day-person-avatar { display: grid; place-items: center; flex-shrink: 0; width: 31px; height: 31px; border-radius: 7px; background: #edf2e4; color: #7e936d; font: 600 12px var(--mono); }
+.day-person-maybe .day-person-avatar { background: #f8f0dc; color: #a28e54; }
+.day-person-no .day-person-avatar { background: #f8eae4; color: #ae8a7e; }
+.day-person-body { min-width: 0; flex: 1; }
+.day-person-top { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; margin-bottom: 5px; }
+.day-person-top strong { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.day-person-top small { color: #a3ad98; font-size: 9px; }
+.day-person-presence { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; align-self: center; }
+.day-presence-online { background: #6f9d5d; box-shadow: 0 0 0 2px #6f9d5d15; }
+.day-presence-away { background: #c39c49; }
+.day-presence-offline { background: #acb3a5; }
+.day-person-answer { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 10px; color: #769166; line-height: 1.5; }
+.day-person-answer > svg { width: 12px; height: 12px; }
+.day-person-answer .day-answer-question { width: 12px; text-align: center; font-size: 12px; }
+.day-person-maybe .day-person-answer { color: #aa9354; }
+.day-person-no .day-person-answer { color: #b4877a; }
+.day-person-time { border-left: 1px solid #dfe5d7; padding-left: 7px; margin-left: 3px; color: #8c9782; font-size: 10px; }
+.day-person-note { margin: 7px 0 0; font-size: 11px; line-height: 1.65; color: #85907b; white-space: pre-wrap; overflow-wrap: anywhere; }
+.day-availability-no-replies { padding: 13px 0 3px; margin: 0; color: #98a28d; font-size: 11px; line-height: 1.7; }
+.day-availability-empty { text-align: center; }
+.day-availability-empty-icon { display: grid; place-items: center; width: 54px; height: 54px; margin: 0 auto 15px; border-radius: 9px; background: #edf3e3; color: #80976c; }
+.day-availability-empty p { margin: 0 0 22px; font-size: 13px; line-height: 1.8; color: #85917b; }
+
+@media (max-width: 520px) {
+  .day-answer-fieldset legend { font-size: 19px; }
+  .day-answer-choices { gap: 7px; }
+  .day-answer-choice { min-height: 80px; padding: 12px 5px 10px; font-size: 12px; }
+  .day-availability-hint { font-size: 11px; }
+  .day-availability .field > span > small { font-size: 10px; }
+  .day-availability-clear { font-size: 11px; min-height: 44px; }
+  .day-person-top strong { font-size: 12px; }
+  .day-person-note { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .day-answer-choice { transition: none; }
+}

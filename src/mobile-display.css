@@ -1,0 +1,47 @@
+/* Bundled, readable type; never depend on the phone's vendor font or forced dark mode. */
+:root {
+  color-scheme: only light;
+  font-family: 'Noto Sans Variable', sans-serif;
+  --heading: 'Manrope Variable', 'Noto Sans Variable', sans-serif;
+  --mono: 'Noto Sans Variable', sans-serif;
+  --inset-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --inset-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --inset-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --inset-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+}
+body { font-family: 'Noto Sans Variable', sans-serif; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+input, textarea, select { color-scheme: only light; color: var(--app-ink); background-color: var(--app-paper); }
+button, input, textarea, select { font-family: inherit; }
+.language-picker, .language-picker-trigger, .language-picker-menu, .language-picker-option { font-family: 'Noto Sans Variable', sans-serif; }
+.language-picker.is-compact { width: 108px; max-width: 108px; flex-basis: 108px; }
+.language-picker.is-compact .language-picker-trigger { width: 108px; max-width: 108px; font-size: 13px; }
+.topbar { overflow: visible; }
+.app-body { padding-left: var(--inset-left); padding-right: var(--inset-right); }
+.topbar { height: auto; min-height: calc(76px + var(--inset-top)); padding-top: var(--inset-top); }
+.sidebar { padding-top: calc(30px + var(--inset-top)); padding-bottom: calc(22px + var(--inset-bottom)); }
+.topbar-actions { min-width: 0; }
+.welcome-languages button { min-height: 62px; line-height: 1.5; }
+.language-symbol { display: grid; place-items: center; width: 36px; height: 36px; color: var(--app-accent); background: #edf2e8; border: 1px solid #dce6d5; border-radius: 5px; }
+.welcome-languages strong { font-size: 16px; line-height: 1.6; }
+.language-picker-option { font-size: 16px; min-height: 48px; }
+.welcome-page { padding-top: var(--inset-top); padding-right: var(--inset-right); padding-bottom: var(--inset-bottom); padding-left: var(--inset-left); }
+.session-loading { padding: max(24px, var(--inset-top)) max(24px, var(--inset-right)) max(24px, var(--inset-bottom)) max(24px, var(--inset-left)); }
+.modal-backdrop { padding: max(13px, var(--inset-top)) max(13px, var(--inset-right)) max(13px, var(--inset-bottom)) max(13px, var(--inset-left)); }
+.modal { max-height: calc(100dvh - max(26px, var(--inset-top) + var(--inset-bottom) + 26px)); }
+@media (max-width: 780px) {
+  .app-body { padding-left: var(--inset-left); padding-right: var(--inset-right); }
+  .topbar { height: auto; min-height: calc(66px + var(--inset-top)); padding-top: var(--inset-top); }
+  .sidebar { padding-top: calc(25px + var(--inset-top)); padding-bottom: calc(22px + var(--inset-bottom)); padding-left: calc(22px + var(--inset-left)); }
+  .mobile-bottom { padding: 8px max(12px, var(--inset-right)) max(8px, var(--inset-bottom)) max(12px, var(--inset-left)); }
+  .app-body main { padding-bottom: calc(110px + var(--inset-bottom)); }
+  .toast { bottom: calc(86px + var(--inset-bottom)); }
+}
+@media (max-width: 520px) {
+  .topbar { padding-left: 12px; padding-right: 12px; min-height: calc(66px + var(--inset-top)); }
+  .topbar-actions { gap: 6px; }
+  .breadcrumb { gap: 4px; min-width: 0; }
+  .breadcrumb strong { font-size: 13px; overflow-wrap: anywhere; }
+  .topbar .connection-pill { font-size: 0; gap: 0; }
+  .topbar .connection-pill > span { width: 7px; height: 7px; }
+  .language-picker.is-compact .language-picker-trigger { padding-left: 2px; padding-right: 2px; }
+}

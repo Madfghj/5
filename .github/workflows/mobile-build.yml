@@ -1,0 +1,129 @@
+name: Mobile test builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build (macOS usage may consume your Actions allowance)
+        type: choice
+        options: [android, ios, both]
+        default: android
+      api_url:
+        description: Public HTTPS API origin, without /api
+        required: true
+        default: https://opencalendar-space-live.optimisticraccoon.chatgpt.site
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VITE_API_URL: ${{ inputs.api_url }}
+  CI: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm install --global pnpm@11.25.0
+      - run: pnpm install --frozen-lockfile
+      # Build first: cloud tests import the generated asset module.
+      - run: pnpm run build
+      - run: pnpm test
+
+  android:
+    if: inputs.platform == 'android' || inputs.platform == 'both'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm install --global pnpm@11.25.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:mobile
+      - run: pnpm exec cap sync android
+      - run: node scripts/ci-native-check.mjs android
+      - name: Check the runner's existing Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          test -d "$sdk_root/platforms/android-36" || {
+            echo 'This runner lacks Android API 36. Install a compatible SDK after reviewing its terms.' >&2
+            exit 1
+          }
+      - name: Build installable debug APK
+        shell: bash
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew --no-daemon :app:assembleDebug
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: OpenCalendar-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  ios:
+    if: inputs.platform == 'ios' || inputs.platform == 'both'
+    needs: validate
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm install --global pnpm@11.25.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:mobile
+      - run: pnpm exec cap sync ios
+      - run: node scripts/ci-native-check.mjs ios
+      - name: Check Xcode and build an unsigned simulator app
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcode_major="$(xcodebuild -version | sed -n '1s/Xcode \([0-9]*\).*/\1/p')"
+          test "$xcode_major" -ge 26
+          xcodebuild -resolvePackageDependencies -project ios/App/App.xcodeproj -scheme App
+          xcodebuild -project ios/App/App.xcodeproj -scheme App \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/OpenCalendar-derived" \
+            CODE_SIGNING_ALLOWED=NO build
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$RUNNER_TEMP/OpenCalendar-derived/Build/Products/Debug-iphonesimulator/App.app" \
+            "$RUNNER_TEMP/OpenCalendar-ios-simulator.zip"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: OpenCalendar-ios-simulator
+          path: ${{ runner.temp }}/OpenCalendar-ios-simulator.zip
+          if-no-files-found: error
+          retention-days: 7

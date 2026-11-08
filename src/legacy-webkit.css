@@ -1,0 +1,19 @@
+/* Monterey initially shipped Safari 15. Keep its layout readable before newer
+   dynamic viewport units and color-mix() are available. */
+:root { --viewport-height: 100vh; color-scheme: light; }
+@supports (height: 100dvh) { :root { --viewport-height: 100dvh; } }
+.welcome-page, .session-loading, .app-body { min-height: var(--viewport-height); }
+.app-body main { min-height: calc(var(--viewport-height) - 77px); }
+.app-body .calendar-page > .page-heading { display: none; }
+.modal { max-height: calc(var(--viewport-height) - max(26px, var(--inset-top) + var(--inset-bottom) + 26px)); }
+@supports not (color: color-mix(in srgb, black, white)) {
+  :root { --scene-panel: var(--app-paper); }
+  .topbar, .calendar-panel { background: var(--app-paper); }
+  .groups-page, :root[data-theme] .groups-page { border-color: var(--app-line); }
+  .calendar-event { background: var(--app-tint); color: var(--app-ink); }
+}
+@media (max-width: 780px) {
+  .app-body main { min-height: calc(var(--viewport-height) - 66px); }
+  .app-body::before { background-size: auto max(var(--viewport-height), 760px); }
+}
+@media (max-width: 520px) { .app-body main { min-height: calc(var(--viewport-height) - 62px); } }

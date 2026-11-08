@@ -1,0 +1,50 @@
+.groups-page {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 500px;
+  padding: 22px;
+  border: 1px solid #e0e8d8;
+  border-radius: 14px;
+  background-color: #f3f7ed;
+  background-image:
+    radial-gradient(ellipse at 94% 5%, #e9e2f4b3 0, transparent 48%),
+    radial-gradient(ellipse at 5% 95%, #e1edd5b3 0, transparent 58%),
+    linear-gradient(#6b845b0a 1px, transparent 1px),
+    linear-gradient(90deg, #6b845b0a 1px, transparent 1px),
+    linear-gradient(155deg, #fbfcf8, #f0f5e9);
+  background-size: auto, auto, 28px 28px, 28px 28px, auto;
+}
+
+.groups-page::before,
+.groups-page::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.groups-page::before {
+  height: 260px;
+  background: linear-gradient(180deg, #d9e6cea6, #dfead412);
+  clip-path: polygon(0 100%, 0 69%, 9% 69%, 9% 56%, 20% 56%, 20% 43%, 31% 43%, 31% 58%, 43% 58%, 43% 73%, 57% 73%, 57% 64%, 70% 64%, 70% 49%, 83% 49%, 83% 35%, 93% 35%, 93% 52%, 100% 52%, 100% 100%);
+}
+
+.groups-page::after {
+  height: 160px;
+  background: linear-gradient(180deg, #cddfc2a3, #dbe7cf33);
+  clip-path: polygon(0 100%, 0 60%, 14% 60%, 14% 77%, 29% 77%, 29% 65%, 43% 65%, 43% 48%, 56% 48%, 56% 35%, 67% 35%, 67% 54%, 80% 54%, 80% 71%, 92% 71%, 92% 58%, 100% 58%, 100% 100%);
+}
+
+.groups-page > .groups-actions,
+.groups-page > .group-cards { position: relative; z-index: 1; }
+.groups-page > .groups-actions { flex-wrap: wrap; }
+.groups-page .group-card { background-color: #ffffffed; }
+.groups-page .create-group-card { background-color: #f9fcf5ed; }
+
+@media (max-width: 780px) {
+  .groups-page { min-height: 60dvh; padding: 16px; border-radius: 12px; }
+  .groups-page::before { height: 230px; }
+  .groups-page::after { height: 150px; }
+}

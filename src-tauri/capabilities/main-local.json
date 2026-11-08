@@ -1,0 +1,30 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-local",
+  "description": "Local OpenCalendar UI: auth return, focus events, explicit link opening, clipboard write and export to a user-selected save path.",
+  "windows": ["main"],
+  "local": true,
+  "platforms": ["macOS"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-is-focused",
+    "core:window:allow-destroy",
+    "deep-link:allow-get-current",
+    "dialog:allow-save",
+    "fs:allow-write-text-file",
+    "clipboard-manager:allow-write-text",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://opencalendar-space-live.optimisticraccoon.chatgpt.site/*" },
+        { "url": "https://t.me/*" },
+        { "url": "https://telegram.me/*" },
+        { "url": "https://wa.me/*" },
+        { "url": "https://whatsapp.com/*" },
+        { "url": "https://www.whatsapp.com/*" },
+        { "url": "https://signal.me/*" }
+      ]
+    }
+  ]
+}

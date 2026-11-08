@@ -1,0 +1,203 @@
+name: Mobile signed archives
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Signed archive to create (this does not upload to either store)
+        type: choice
+        options: [android, ios]
+        default: android
+      api_url:
+        description: Public HTTPS API origin, without /api
+        required: true
+        default: https://opencalendar-space-live.optimisticraccoon.chatgpt.site
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-release-${{ github.ref }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+env:
+  VITE_API_URL: ${{ inputs.api_url }}
+  CI: true
+
+jobs:
+  android:
+    if: inputs.platform == 'android'
+    environment: mobile-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/opencalendar-upload.jks
+    steps:
+      - name: Require upload signing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in ANDROID_KEYSTORE_BASE64 ANDROID_STORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            test -n "${!key}" || { echo "Missing protected environment secret: $key" >&2; exit 1; }
+          done
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm install --global pnpm@11.25.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm test
+      - run: pnpm run build:mobile
+      - run: pnpm exec cap sync android
+      - run: node scripts/ci-native-check.mjs android
+      - name: Build and verify a signed Android App Bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+          chmod +x android/gradlew
+          cd android
+          ./gradlew --no-daemon --init-script ../scripts/ci-android-signing.gradle :app:bundleRelease
+          bundle='app/build/outputs/bundle/release/app-release.aab'
+          test -s "$bundle"
+          jar tf "$bundle" | rg -q '^META-INF/[^/]+\.(RSA|DSA|EC)$'
+          jarsigner -verify "$bundle"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: OpenCalendar-android-signed-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove temporary upload key
+        if: always()
+        shell: bash
+        run: rm -f -- "$ANDROID_KEYSTORE_PATH"
+
+  ios:
+    if: inputs.platform == 'ios'
+    environment: mobile-release
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      KEYCHAIN_PATH: ${{ runner.temp }}/opencalendar-signing.keychain-db
+    steps:
+      - name: Require distribution signing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in APPLE_CERTIFICATE_BASE64 APPLE_CERTIFICATE_PASSWORD APPLE_PROVISIONING_PROFILE_BASE64 APPLE_TEAM_ID; do
+            test -n "${!key}" || { echo "Missing protected environment secret: $key" >&2; exit 1; }
+          done
+          [[ "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo 'APPLE_TEAM_ID must be a 10-character Apple team identifier.' >&2; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm install --global pnpm@11.25.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm test
+      - run: pnpm run build:mobile
+      - run: pnpm exec cap sync ios
+      - run: node scripts/ci-native-check.mjs ios
+      - name: Install signing material in the temporary runner keychain
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/distribution.p12"
+          printf '%s' "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"
+          keychain_password="$(openssl rand -base64 32)"
+          echo "::add-mask::$keychain_password"
+          security create-keychain -p "$keychain_password" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$keychain_password" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/distribution.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$keychain_password" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security cms -D -i "$RUNNER_TEMP/app.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          profile_uuid="$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")"
+          [[ "$profile_uuid" =~ ^[A-Fa-f0-9-]{36}$ ]] || { echo 'Invalid provisioning profile UUID.' >&2; exit 1; }
+          profile_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$profile_dir"
+          cp "$RUNNER_TEMP/app.mobileprovision" "$profile_dir/$profile_uuid.mobileprovision"
+          echo "PROFILE_UUID=$profile_uuid" >> "$GITHUB_ENV"
+      - name: Archive and export an App Store IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcode_major="$(xcodebuild -version | sed -n '1s/Xcode \([0-9]*\).*/\1/p')"
+          test "$xcode_major" -ge 26
+          # Set signing only on the application's configurations. Passing a
+          # provisioning profile globally would also affect Swift packages.
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          path=Path('ios/App/App.xcodeproj/project.pbxproj')
+          source=path.read_text()
+          signing={'CODE_SIGN_STYLE':'Manual','DEVELOPMENT_TEAM':os.environ['APPLE_TEAM_ID'],'CODE_SIGN_IDENTITY':'"Apple Distribution"','PROVISIONING_PROFILE_SPECIFIER':os.environ['PROFILE_UUID']}
+          configured=[]
+          def configure(match):
+              settings=match.group(2)
+              if not re.search(r'\bPRODUCT_BUNDLE_IDENTIFIER\s*=',settings): return match.group(0)
+              for key,value in signing.items():
+                  line='\t\t\t\t'+key+' = '+value+';'
+                  settings,count=re.subn(r'(?m)^[ \t]*'+re.escape(key)+r'\s*=\s*[^;]+;',lambda _:line,settings)
+                  if not count: settings+='\n'+line
+              configured.append(True)
+              return match.group(1)+settings+match.group(3)
+          source=re.sub(r'(buildSettings = \{)(.*?)(\n\s*\};)',configure,source,flags=re.S)
+          if not configured: raise SystemExit('Application build configurations were not found')
+          path.write_text(source)
+          PY
+          xcodebuild -resolvePackageDependencies -project ios/App/App.xcodeproj -scheme App
+          xcodebuild -project ios/App/App.xcodeproj -scheme App \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/OpenCalendar.xcarchive" archive
+          python3 - <<'PY'
+          import os, plistlib, re
+          from pathlib import Path
+          project=Path('ios/App/App.xcodeproj/project.pbxproj').read_text()
+          bundle=re.search(r'PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);',project).group(1).strip()
+          options={'method':'app-store-connect','signingStyle':'manual','teamID':os.environ['APPLE_TEAM_ID'],'provisioningProfiles':{bundle:os.environ['PROFILE_UUID']},'uploadSymbols':True,'manageAppVersionAndBuildNumber':False}
+          Path(os.environ['RUNNER_TEMP'],'ExportOptions.plist').write_bytes(plistlib.dumps(options))
+          PY
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/OpenCalendar.xcarchive" \
+            -exportPath "$RUNNER_TEMP/OpenCalendar-export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: OpenCalendar-ios-app-store-ipa
+          path: ${{ runner.temp }}/OpenCalendar-export/*.ipa
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove temporary signing material
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          rm -f -- "$RUNNER_TEMP/distribution.p12" "$RUNNER_TEMP/app.mobileprovision" "$RUNNER_TEMP/profile.plist"
+          if [[ "${PROFILE_UUID:-}" =~ ^[A-Fa-f0-9-]{36}$ ]]; then
+            rm -f -- "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          fi

@@ -1,0 +1,1 @@
+CREATE TABLE user_presence (user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id) ON DELETE CASCADE, mode TEXT NOT NULL DEFAULT 'online' CHECK(mode IN ('online','away','dnd','invisible')), last_seen_at INTEGER NOT NULL);

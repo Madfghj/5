@@ -1,0 +1,349 @@
+/* Last-loaded typography overrides. Keep the existing sage and pixel layout. */
+:root {
+  font-size: 14px;
+  color: #2e4435;
+  --muted: #53684f;
+  --readable-secondary: #53684f;
+  --readable-quiet: #62745a;
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: auto;
+}
+
+/* Navigation and the main calendar. */
+.workspace strong,
+.primary-nav button,
+.group-nav > button,
+.join-sidebar,
+.sidebar-setting,
+.breadcrumb,
+.rail-group strong {
+  font-size: 13px;
+  color: var(--readable-secondary);
+}
+.workspace small,
+.group-heading,
+.group-nav small,
+.rail-group small,
+.breadcrumb-root,
+.breadcrumb-slash {
+  font-size: 12px;
+  color: var(--readable-secondary);
+}
+.primary-nav button,
+.group-nav > button,
+.join-sidebar,
+.sidebar-setting { min-height: 44px; }
+.primary-nav button.active { color: #2c5135; }
+.brand-space,
+.nav-caption,
+.nav-count,
+.mono-label { font-size: 10px; color: var(--readable-secondary); }
+.little-note strong { font-size: 14px; }
+.little-note p { font-size: 12px; color: var(--readable-secondary); }
+.little-note > span { font-size: 10px; color: var(--readable-secondary); }
+.eyebrow,
+.hero-eyebrow { font-size: 10px; color: var(--readable-secondary); }
+.page-heading p,
+.hero p { font-size: 13px; color: var(--readable-secondary); line-height: 1.75; }
+.hero h2 > span { color: #526e43; }
+.hero-link { font-size: 13px; min-height: 36px; }
+.hero-coordinate { font-size: 10px; color: var(--readable-secondary); letter-spacing: .3px; }
+.demo-banner { font-size: 12px; color: var(--readable-secondary); }
+.demo-banner button { font-size: 12px; min-height: 36px; color: #456e36; }
+.connection-pill,
+.settings-profile > .connection-pill { font-size: 12px; font-weight: 500; }
+.connection-pill.online { color: #456e36; }
+.connection-pill.demo { color: #80651f; }
+.connection-pill.offline { color: #8c5144; }
+.language-control { color: var(--readable-secondary); }
+.language-control select { font-size: 12px; min-height: 40px; }
+.month-navigation h2 { font-size: 17px; }
+.month-navigation .icon-button { width: 40px; height: 40px; color: var(--readable-secondary); }
+.today-button,
+.view-switch button { font-size: 12px; color: var(--readable-secondary); min-height: 36px; }
+.view-switch button.active { color: #36552c; }
+.calendar-filter,
+.calendar-filter > span:first-child { font-size: 12px; color: var(--readable-secondary); }
+.calendar-filter > span:last-child { font-size: 10px; color: var(--readable-secondary); }
+.weekdays span,
+.weekdays span:nth-child(n+6) { font-size: 11px; color: var(--readable-secondary); }
+.day-select { font-size: 13px; font-weight: 500; color: #4f6547; min-height: 44px; }
+.day-select > span:first-child { min-width: 24px; height: 24px; }
+.muted-day .day-select { color: var(--readable-quiet); }
+.day-select .today-number { color: #fff; }
+.calendar-event { font-size: 11px; color: #304c34; line-height: 1.45; }
+.calendar-event > span { font-size: 10px; opacity: 1; }
+.more-events { font-size: 11px; color: var(--readable-secondary); min-height: 28px; }
+.week-day-heading { min-height: 44px; }
+.week-day-heading small,
+.week-event > span { font-size: 11px; color: var(--readable-secondary); }
+.week-event strong { font-size: 13px; }
+.week-event small { font-size: 12px; color: var(--readable-secondary); }
+.week-free { color: var(--readable-quiet); }
+.calendar-tap-hint { font-size: 13px; color: var(--readable-secondary); }
+.quick-day-cell .quick-day-select { font-size: 13px; min-height: 44px; }
+.day-answer-badge,
+.quick-day-select .day-answer-badge { font-size: 11px; color: var(--readable-secondary); }
+.day-answer-badge.answer-yes { color: #456e36; }
+.day-answer-badge.answer-maybe { color: #80651f; }
+.day-answer-badge.answer-no { color: #8c5144; }
+.day-answer-row strong { font-size: 14px; }
+.day-answer-row small { font-size: 12px; color: var(--readable-secondary); }
+.day-answer-row p,
+.day-answer-empty { font-size: 13px; color: var(--readable-secondary); }
+
+/* Events, groups and answer buttons. */
+.button,
+.modal-content .button,
+.modal-actions .button,
+.modal-actions > .button,
+.modal-actions.event-actions .button,
+.profile-form .button,
+.groups-actions .button,
+.group-card-actions > .button {
+  min-height: 44px;
+  font-size: 13px;
+  font-weight: 550;
+  white-space: normal;
+}
+.button.secondary { color: var(--readable-secondary); }
+.text-button,
+.section-heading .text-button,
+.settings-bottom .text-button { font-size: 13px; min-height: 40px; }
+.section-heading h3,
+.form-section-title { font-size: 14px; color: #3d5934; }
+.rail-count { font-size: 11px; color: var(--readable-secondary); }
+.day-detail-title strong { font-size: 14px; white-space: normal; }
+.day-detail-title small { font-size: 11px; color: var(--readable-secondary); }
+.day-empty,
+.rail-empty,
+.rail-empty .text-button { font-size: 13px; color: var(--readable-secondary); }
+.rail-empty strong { font-size: 14px; }
+.detail-line,
+.modal-content .detail-line { font-size: 13px; color: var(--readable-secondary); }
+.event-group-tag {
+  font-size: 12px;
+  /* The original tag sets a pale foreground inline; retain its colored background. */
+  color: #3e5335 !important;
+}
+.attendee-row > span,
+.your-response-label { font-size: 12px; color: var(--readable-secondary); }
+.attendee-row strong { color: #456e36; }
+.response,
+.compact .response {
+  min-height: 44px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--readable-secondary);
+  white-space: normal;
+}
+.compact .response { padding: 8px 4px; gap: 4px; font-size: 12px; }
+.response-yes.selected { color: #456e36; }
+.response-maybe.selected { color: #80651f; }
+.response-no.selected { color: #8c5144; }
+.answer-name { font-size: 12px; color: var(--readable-secondary); }
+.answer-yes > span:first-child { color: #456e36; }
+.answer-maybe > span:first-child { color: #80651f; }
+.answer-no > span:first-child { color: #8c5144; }
+.event-date strong { color: #4f6c40; }
+.event-date small { font-size: 10px; color: var(--readable-secondary); }
+.event-row-body > strong,
+.schedule-list .event-row-body > strong { font-size: 14px; }
+.event-row-body > small,
+.schedule-list .event-row-body > small {
+  font-size: 12px;
+  color: var(--readable-secondary);
+  white-space: normal;
+  flex-wrap: wrap;
+  line-height: 1.6;
+}
+.invite-card h3 { font-size: 15px; color: #665077; }
+.invite-card p { font-size: 13px; color: #665077; }
+.invite-card button { font-size: 13px; min-height: 40px; color: #665077; }
+.group-card > p,
+.create-group-card small { font-size: 13px; color: var(--readable-secondary); }
+.create-group-card strong { font-size: 15px; color: #456e36; }
+.avatar { color: #4f6547; }
+.avatar-small { font-size: 12px; }
+.mobile-bottom > button { min-height: 44px; font-size: 11px; color: var(--readable-secondary); }
+.mobile-bottom > button.active { color: #365a2a; }
+.mobile-bottom .mobile-add { color: #fff; }
+
+/* Shared forms, settings and account details. */
+.modal-header h2 { font-size: 18px; }
+.modal-header .icon-button { width: 44px; height: 44px; color: var(--readable-secondary); }
+.field > span,
+.input-label { font-size: 13px; color: var(--readable-secondary); }
+.field > span small { font-size: 12px; color: var(--readable-secondary); }
+.field input,
+.field select,
+.field textarea { font-size: 14px; line-height: 1.6; }
+.field input::placeholder,
+.field textarea::placeholder { font-size: 13px; color: var(--readable-quiet); opacity: 1; }
+.field-hint { font-size: 12px; color: var(--readable-secondary); }
+.field-error { font-size: 13px; color: #944e43; }
+.muted,
+.login-content > .muted,
+.contacts-form .muted { font-size: 13px; color: var(--readable-secondary); line-height: 1.75; }
+.event-notes { font-size: 14px; color: var(--readable-secondary); }
+.response-summary { font-size: 12px; color: var(--readable-secondary); }
+.summary-yes,
+.member-response.yes { color: #456e36; }
+.summary-maybe,
+.member-response.maybe { color: #80651f; }
+.summary-no,
+.member-response.no { color: #8c5144; }
+.participant-list > div { font-size: 14px; }
+.member-response { font-size: 12px; color: var(--readable-secondary); }
+.member-contacts a { font-size: 11px; color: #456e36; }
+.danger-text { color: #944e43 !important; }
+.empty-state { color: var(--readable-secondary); }
+.empty-state strong { font-size: 16px; color: #456e36; }
+.empty-state p { font-size: 13px; color: var(--readable-secondary); }
+.inline-note { font-size: 12px; color: #80651f; }
+.provider-button > strong { font-size: 13px; }
+.provider-button > span:last-child { font-size: 12px; color: var(--readable-secondary); }
+.provider-button.is-connected > span:last-child { color: #456e36; }
+.form-divider { font-size: 12px; color: var(--readable-secondary); }
+.login-privacy { font-size: 12px; color: var(--readable-secondary); }
+.settings-profile > span:nth-child(2) { min-width: 0; }
+.settings-profile strong { font-size: 15px; }
+.settings-profile small { font-size: 12px; color: var(--readable-secondary); overflow-wrap: anywhere; }
+.settings-info { color: var(--readable-secondary); }
+.settings-info strong { font-size: 13px; color: #456e36; }
+.settings-info p,
+.confirm-text,
+.about-content > p { font-size: 13px; color: var(--readable-secondary); }
+.email-status { font-size: 12px; color: #80651f; }
+.contacts-form input { font-size: 14px; }
+.toast { font-size: 13px; }
+
+/* First launch and sign-in use the same readable scale. */
+.welcome-brand > span > span { font-size: 11px; color: var(--readable-secondary); }
+.auth-kicker,
+.welcome-story-copy > .auth-kicker,
+.language-step > .auth-kicker,
+.modal-content .auth-panel-heading > .auth-kicker { font-size: 10px; color: var(--readable-secondary); }
+.welcome-story h1 em { color: #526e43; }
+.welcome-story-copy > p { font-size: 14px; color: var(--readable-secondary); line-height: 1.75; }
+.welcome-calendar-days > span { font-size: 10px; color: var(--readable-secondary); }
+.welcome-answer-preview > span { font-size: 12px; color: #456e36; }
+.welcome-answer-preview > span:nth-child(2) { color: #80651f; }
+.welcome-answer-preview > span:nth-child(3) { color: #8c5144; }
+.welcome-progress { font-size: 11px; color: var(--readable-secondary); }
+.welcome-progress > span.complete { color: #456e36; }
+.welcome-back { font-size: 13px; min-height: 44px; color: #456e36; }
+.language-step > p,
+.auth-panel-heading > p { font-size: 14px; color: var(--readable-secondary); line-height: 1.75; }
+.language-code,
+.selected > .language-code { font-size: 12px; color: #4f6c40; }
+.welcome-languages strong { font-size: 14px; }
+.welcome-languages small { font-size: 11px; color: var(--readable-secondary); }
+.auth-submit { min-height: 48px; font-size: 14px; }
+.auth-demo-link { font-size: 13px; color: #456e36; min-height: 44px; }
+.language-step > p.welcome-language-note { font-size: 12px; color: var(--readable-secondary); }
+.auth-mode-tabs > button { min-height: 40px; font-size: 13px; color: var(--readable-secondary); }
+.auth-mode-tabs > button.active { color: #365a2a; }
+.auth-field { font-size: 13px; color: var(--readable-secondary); }
+.auth-field > div { min-height: 46px; }
+.auth-field input { font-size: 14px; color: #304d38; }
+.auth-field input::placeholder,
+.auth-guest input::placeholder { font-size: 13px; color: var(--readable-quiet); opacity: 1; }
+.auth-input-hint,
+.auth-privacy { font-size: 12px; color: var(--readable-secondary); line-height: 1.75; }
+.auth-form-error { font-size: 13px; color: #944e43; }
+.auth-divider { font-size: 12px; color: var(--readable-secondary); }
+.auth-provider { min-height: 60px; }
+.auth-provider > span { min-width: 0; }
+.auth-provider strong { font-size: 13px; }
+.auth-provider small { font-size: 12px; color: var(--readable-secondary); line-height: 1.5; }
+.auth-provider:disabled { opacity: 1; background: #f7f8f4; }
+.auth-provider:disabled strong,
+.auth-provider:disabled small { color: var(--readable-secondary); }
+.auth-guest { font-size: 13px; color: var(--readable-secondary); }
+.auth-guest > summary { min-height: 44px; }
+.auth-guest > p { font-size: 13px; color: var(--readable-secondary); }
+.auth-guest input { font-size: 14px; min-height: 44px; }
+.auth-method-status { font-size: 12px; color: var(--readable-secondary); }
+.auth-method-status.error { color: #944e43; }
+.auth-method-status button { font-size: 13px; color: #456e36; min-height: 36px; }
+.session-loading-card > p { font-size: 14px; color: var(--readable-secondary); }
+
+/* Direct day replies and names. */
+.day-availability-group { font-size: 13px; }
+.day-answer-choice { font-size: 13px; color: var(--readable-secondary); }
+.day-answer-maybe.is-selected { color: #80651f; }
+.day-answer-no.is-selected { color: #8c5144; }
+.day-availability-hint,
+.day-availability .field > span > small { font-size: 12px; color: var(--readable-secondary); }
+.day-availability-range { font-size: 11px; color: var(--readable-secondary); }
+.day-availability-clear { min-height: 44px; font-size: 12px; color: var(--readable-secondary); }
+.day-availability-people-heading h3 { font-size: 14px; }
+.day-availability-people-heading > span { font-size: 11px; color: var(--readable-secondary); }
+.day-person-top strong { font-size: 14px; }
+.day-person-top small { font-size: 12px; color: var(--readable-secondary); }
+.day-person-answer { font-size: 12px; color: #456e36; }
+.day-person-maybe .day-person-answer { color: #80651f; }
+.day-person-no .day-person-answer { color: #8c5144; }
+.day-person-time { font-size: 12px; color: var(--readable-secondary); }
+.day-person-note { font-size: 13px; color: var(--readable-secondary); }
+.day-availability-no-replies,
+.day-availability-empty p { font-size: 13px; color: var(--readable-secondary); }
+.day-person-avatar { color: #456e36; }
+.day-person-maybe .day-person-avatar { color: #80651f; }
+.day-person-no .day-person-avatar { color: #8c5144; }
+
+/* Small mono copy stays readable and may wrap instead of shrinking. */
+.calendar-footer,
+.calendar-footer > span:last-child,
+.page-footer,
+.sidebar-footer,
+.welcome-story-footer,
+.welcome-form-footer {
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--readable-secondary);
+  flex-wrap: wrap;
+  row-gap: 7px;
+}
+.page-footer > span:last-child,
+.calendar-footer > span,
+.welcome-form-footer > span { white-space: normal; }
+.day-select,
+.day-availability-range,
+.day-person-time { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 780px) {
+  .hero p,
+  .page-heading p,
+  .welcome-story-copy > p { font-size: 13px; }
+  .calendar-toolbar { row-gap: 12px; }
+  .mobile-bottom > button { line-height: 1.45; }
+  .calendar-footer { gap: 6px 12px; }
+}
+
+@media (max-width: 520px) {
+  .field input,
+  .field select,
+  .field textarea,
+  .contacts-form input,
+  .auth-field input,
+  .auth-guest input { font-size: 16px; }
+  .field input::placeholder,
+  .field textarea::placeholder,
+  .auth-field input::placeholder,
+  .auth-guest input::placeholder { font-size: 13px; }
+  .view-switch button { padding: 7px 12px; }
+  .calendar-filter { gap: 8px; flex-wrap: wrap; }
+  .calendar-filter > span:last-child { font-size: 10px; }
+  .weekdays span { padding-left: 3px; padding-right: 3px; font-size: 10px; }
+  .quick-day-select .day-answer-badge { font-size: 10px; }
+  .page-footer { align-items: flex-start; gap: 8px 14px; letter-spacing: .2px; }
+  .welcome-form-footer { gap: 8px 14px; }
+  .modal-actions.event-actions .button { padding-left: 10px; padding-right: 10px; }
+}
+.mobile-group-create{display:none}.little-note-button>span{font-family:var(--heading);font-size:13px;letter-spacing:0;text-transform:none}.page-heading h1{line-height:1.35}.page-heading p,.calendar-tap-hint{font-size:14px}.day-answer-choice{font-size:14px}.group-heading>span{font-size:13px;letter-spacing:0}.little-note-button strong{font-size:15px}.little-note-button p{font-size:13px;line-height:1.65}@media(max-width:780px){.mobile-group-create{display:inline-flex}}@media(max-width:520px){.page-heading p,.calendar-tap-hint{font-size:13px}.day-answer-choice{font-size:13px}}

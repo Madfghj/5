@@ -1,0 +1,1 @@
+CREATE TABLE availability (group_id TEXT NOT NULL, user_id TEXT NOT NULL, date TEXT NOT NULL, value TEXT NOT NULL CHECK(value IN ('yes','no','maybe')), time TEXT, note TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL, PRIMARY KEY(group_id,user_id,date), FOREIGN KEY(group_id,user_id) REFERENCES members(group_id,user_id) ON DELETE CASCADE);

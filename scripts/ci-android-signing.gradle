@@ -1,0 +1,19 @@
+// CI-only Gradle init script. Secrets are read from the runner environment,
+// never project properties, source files or command-line arguments.
+gradle.beforeProject { project ->
+    project.pluginManager.withPlugin('com.android.application') {
+        def required = ['ANDROID_KEYSTORE_PATH', 'ANDROID_STORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD']
+        required.each { key ->
+            if (!System.getenv(key)) throw new GradleException("Missing CI signing environment variable: ${key}")
+        }
+        def android = project.extensions.getByName('android')
+        def signing = android.signingConfigs.maybeCreate('ciRelease')
+        signing.storeFile = new File(System.getenv('ANDROID_KEYSTORE_PATH'))
+        signing.storePassword = System.getenv('ANDROID_STORE_PASSWORD')
+        signing.keyAlias = System.getenv('ANDROID_KEY_ALIAS')
+        signing.keyPassword = System.getenv('ANDROID_KEY_PASSWORD')
+        android.buildTypes.configureEach { type ->
+            if (type.name == 'release') type.signingConfig = signing
+        }
+    }
+}

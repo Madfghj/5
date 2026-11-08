@@ -1,0 +1,38 @@
+.customization-page { max-width: 840px; display: grid; gap: 20px; }
+.customization-preview { display: flex; align-items: center; gap: 20px; padding: 24px; border: 1px solid #dfe7d8; border-radius: 12px; background: linear-gradient(120deg,#f3f8ed,#f4eff8); }
+.customization-preview > .preset-pixel-avatar { width: 80px; height: 80px; flex-shrink: 0; }
+.customization-preview strong { display: block; font: 700 24px/1.4 var(--heading); overflow-wrap: anywhere; color: #304c38; }
+.customization-preview p { margin: 7px 0 0; font-size: 14px; line-height: 1.65; color: #53684f; overflow-wrap: anywhere; }
+.customization-card { max-width: 840px; padding: 25px; border: 1px solid #e0e7d8; border-radius: 12px; background: #fffffff5; display: grid; gap: 24px; }
+.customization-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.customization-card .field { margin: 0; min-width: 0; }
+.customization-card .field > span { gap: 9px; display: flex; align-items: baseline; flex-wrap: wrap; }
+.customization-help { display: block; margin-top: 6px; color: #53684f; font-size: 12px; line-height: 1.6; }
+.customization-options { border: 0; margin: 0; padding: 0; min-width: 0; }
+.customization-options legend { padding: 0; margin-bottom: 13px; font: 650 14px/1.6 var(--heading); color: #3d5934; }
+.customization-avatar-grid,.customization-palette-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
+.customization-avatar-option { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; border: 1px solid #dde6d4; border-radius: 8px; background: #fbfcf9; padding: 14px 8px 12px; color: #53684f; font-size: 13px; min-width: 0; line-height: 1.5; }
+.customization-avatar-option .preset-pixel-avatar { width: 54px; height: 54px; }
+.customization-avatar-option.is-selected,.customization-palette-option.is-selected,.customization-theme-option.is-selected { border-color: #7da55e; box-shadow: 0 0 0 1px #7da55e; background-color: #f0f6e8; color: #36572c; }
+.customization-check { position: absolute; top: 8px; right: 8px; color: #456e36; }
+.customization-avatar-option:focus-visible,.customization-palette-option:focus-visible,.customization-theme-option:focus-visible { outline: 3px solid #b9d29c; outline-offset: 3px; }
+.customization-palette-option { min-height: 67px; min-width: 0; padding: 11px 7px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid #dde6d4; border-radius: 7px; color: #53684f; background: #fbfcf9; font-size: 13px; line-height: 1.5; }
+.customization-swatch { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 5px; border: 1px solid #899c7b; flex-shrink: 0; color: #304d38; }
+.customization-swatch-sage { background: #bfd3a7; }.customization-swatch-white { background: #fff; }.customization-swatch-sand { background: #e8d5ae; }.customization-swatch-cocoa { background: #97745c; color: #fff; border-color: #7e5d49; }
+.customization-theme-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.customization-theme-option { display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid #dde6d4; border-radius: 8px; background: #fbfcf9; text-align: center; color: #53684f; }
+.customization-theme-option > strong { width: 100%; padding: 10px 5px; font-size: 13px; font-weight: 550; overflow-wrap: anywhere; }
+.customization-theme-preview { display: block; position: relative; width: 100%; height: 88px; overflow: hidden; background: linear-gradient(160deg,#eff6e5,#d2e4c2); }
+.customization-theme-preview::after { content: ''; position: absolute; inset: 35% 0 0; background: #89af7799; clip-path: polygon(0 100%,0 50%,20% 50%,20% 20%,43% 20%,43% 44%,65% 44%,65% 4%,83% 4%,83% 30%,100% 30%,100% 100%); }
+.customization-theme-forest { background: #d7e6c9 url('/theme-forest.webp') center/cover no-repeat; }.customization-theme-forest::after { display: none; }
+.customization-theme-dusk { background: linear-gradient(160deg,#dcd4eb,#efd4c1); }.customization-theme-dusk::after { background: #ab95c080; }
+.customization-theme-preview > span { position: absolute; z-index: 1; top: 8px; right: 8px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 4px; background: #fffffff2; color: #365a2a; }
+.customization-count { display: block; text-align: right; margin-top: 5px; font: 11px var(--mono); color: #53684f; }
+.customization-actions { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.customization-feedback { min-width: 0; font-size: 13px; line-height: 1.7; color: #456e36; }.customization-feedback.error { color: #944e43; }
+.customization-actions > .button { flex-shrink: 0; min-height: 44px; font-size: 13px; }
+.customization-intro { font-size: 14px; color: #53684f; line-height: 1.75; margin: 0; }
+.customization-toggle { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid #e0e7d8; border-radius: 8px; background: #f9fbf5; cursor: pointer; }
+.customization-toggle input { width: 20px; height: 20px; margin: 2px 0 0; flex-shrink: 0; accent-color: #456e36; }
+.customization-toggle strong { display: block; font-size: 14px; font-weight: 550; color: #304d38; }.customization-toggle small { display: block; margin-top: 5px; font-size: 12px; color: #53684f; line-height: 1.7; }
+@media(max-width:600px) { .customization-preview,.customization-card { padding: 19px; }.customization-preview { gap: 15px; }.customization-preview > .preset-pixel-avatar { width: 64px; height: 64px; }.customization-preview strong { font-size: 21px; }.customization-fields { grid-template-columns: minmax(0,1fr); gap: 20px; }.customization-avatar-grid,.customization-palette-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.customization-theme-grid { gap: 8px; }.customization-theme-preview { height: 75px; }.customization-actions { align-items: stretch; flex-direction: column; gap: 10px; }.customization-actions > .button { width: 100%; }.customization-actions > .customization-feedback:empty { display: none; }.customization-card .field input,.customization-card .field select { font-size: 16px; } }
