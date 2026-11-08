@@ -42,13 +42,15 @@ function fixture(t, extra = {}) {
 
 test('desktop CORS admits the exact Tauri origin without granting hostile or opaque origins', async (t) => {
   const f = fixture(t);
-  const allowed = await f.request('/state', { headers: { Origin: 'tauri://localhost' } });
+  for (const origin of ['tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost']) {
+  const allowed = await f.request('/state', { headers: { Origin: origin } });
   assert.equal(allowed.status, 401, 'CORS must not replace account authentication');
-  assert.equal(allowed.headers.get('Access-Control-Allow-Origin'), 'tauri://localhost');
-  const preflight = await f.request('/state', { method: 'OPTIONS', headers: { Origin: 'tauri://localhost', 'Access-Control-Request-Headers': 'authorization,content-type' } });
+  assert.equal(allowed.headers.get('Access-Control-Allow-Origin'), origin);
+  const preflight = await f.request('/state', { method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Headers': 'authorization,content-type' } });
   assert.equal(preflight.status, 204);
   assert.match(preflight.headers.get('Access-Control-Allow-Headers'), /Authorization/);
-  for (const origin of ['null', 'tauri://localhost.evil.example', 'https://evil.example']) {
+  }
+  for (const origin of ['null', 'tauri://localhost.evil.example', 'http://tauri.localhost.evil.example', 'https://evil.example']) {
     const denied = await f.request('/health', { headers: { Origin: origin } });
     assert.equal(denied.status, 403);
     assert.equal(denied.headers.get('Access-Control-Allow-Origin'), null);

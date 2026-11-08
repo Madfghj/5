@@ -2,9 +2,15 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-local",
   "description": "Local OpenCalendar UI: auth return, focus events, explicit link opening, clipboard write and export to a user-selected save path.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "local": true,
-  "platforms": ["macOS"],
+  "platforms": [
+    "macOS",
+    "windows",
+    "linux"
+  ],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
@@ -17,13 +23,30 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://opencalendar-space-live.optimisticraccoon.chatgpt.site/*" },
-        { "url": "https://t.me/*" },
-        { "url": "https://telegram.me/*" },
-        { "url": "https://wa.me/*" },
-        { "url": "https://whatsapp.com/*" },
-        { "url": "https://www.whatsapp.com/*" },
-        { "url": "https://signal.me/*" }
+        {
+          "url": "https://opencalendar-space-live.optimisticraccoon.chatgpt.site/*"
+        },
+        {
+          "url": "https://t.me/*"
+        },
+        {
+          "url": "https://telegram.me/*"
+        },
+        {
+          "url": "https://wa.me/*"
+        },
+        {
+          "url": "https://whatsapp.com/*"
+        },
+        {
+          "url": "https://www.whatsapp.com/*"
+        },
+        {
+          "url": "https://signal.me/*"
+        },
+        {
+          "url": "https://github.com/Madfghj/5/releases*"
+        }
       ]
     }
   ]

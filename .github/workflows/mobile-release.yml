@@ -35,8 +35,10 @@ jobs:
       ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/opencalendar-upload.jks
     steps:
+      - name: Set temporary upload key path
+        shell: bash
+        run: echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/opencalendar-upload.jks" >> "$GITHUB_ENV"
       - name: Require upload signing credentials
         shell: bash
         run: |
@@ -96,8 +98,10 @@ jobs:
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      KEYCHAIN_PATH: ${{ runner.temp }}/opencalendar-signing.keychain-db
     steps:
+      - name: Set temporary signing keychain path
+        shell: bash
+        run: echo "KEYCHAIN_PATH=$RUNNER_TEMP/opencalendar-signing.keychain-db" >> "$GITHUB_ENV"
       - name: Require distribution signing credentials
         shell: bash
         run: |

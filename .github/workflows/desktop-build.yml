@@ -1,13 +1,18 @@
-name: Mac desktop test build
+name: Desktop download builds
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_draft:
+        description: Create a draft GitHub prerelease after all desktop builds pass
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: mac-desktop-test-${{ github.ref }}
+  group: desktop-downloads-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -115,8 +120,8 @@ jobs:
           disk=output/f'OpenCalendar-{expected}-macOS12-universal-test.dmg'
           shutil.copyfile(disks[0],disk)
           files=[{'name':path.name,'bytes':path.stat().st_size,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()} for path in (archive,disk)]
-          report={'schemaVersion':1,'builtAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'version':expected,'bundleId':info['CFBundleIdentifier'],'architectures':sorted(architectures),'minimumSystemVersion':info['LSMinimumSystemVersion'],'binaryMinimums':minimums,'signature':'adhoc','developerIdentityVerified':False,'notarized':False,'storePublished':False,'runtimeTestedOnMonterey':False,'files':files}
-          (output/'native-verification.json').write_text(json.dumps(report,indent=2)+'\n')
+          report={'schemaVersion':1,'builtAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'version':expected,'bundleId':info['CFBundleIdentifier'],'sourceCommit':os.environ['GITHUB_SHA'],'architectures':sorted(architectures),'minimumSystemVersion':info['LSMinimumSystemVersion'],'binaryMinimums':minimums,'signature':'adhoc','developerIdentityVerified':False,'notarized':False,'storePublished':False,'runtimeTestedOnMonterey':False,'files':files}
+          (output/'macOS-native-verification.json').write_text(json.dumps(report,indent=2)+'\n')
           print(json.dumps(report,indent=2))
           PY
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -125,3 +130,104 @@ jobs:
           path: ${{ runner.temp }}/OpenCalendar-desktop-artifacts/*
           if-no-files-found: error
           retention-days: 7
+
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      CI: true
+      RUSTUP_TOOLCHAIN: 1.90.0
+      VITE_API_URL: https://opencalendar-space-live.optimisticraccoon.chatgpt.site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install locked dependencies and the pinned Rust compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm install --global pnpm@11.25.0
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          rustup toolchain install 1.90.0 --profile minimal
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          rustup target add --toolchain 1.90.0 x86_64-pc-windows-msvc
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Compile the x64 Windows installer
+        run: pnpm exec tauri build --ci --target x86_64-pc-windows-msvc --bundles nsis -- --locked
+      - name: Verify and package Windows downloads
+        run: python scripts/verify-desktop-packages.py windows
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: OpenCalendar-Windows-x64-test
+          path: ${{ runner.temp }}/OpenCalendar-desktop-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      CI: true
+      RUSTUP_TOOLCHAIN: 1.90.0
+      # Extract AppImages during bundling instead of depending on FUSE in CI.
+      APPIMAGE_EXTRACT_AND_RUN: '1'
+      VITE_API_URL: https://opencalendar-space-live.optimisticraccoon.chatgpt.site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install native Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: Install locked dependencies and the pinned Rust compiler
+        run: |
+          set -euo pipefail
+          npm install --global pnpm@11.25.0
+          pnpm install --frozen-lockfile
+          rustup toolchain install 1.90.0 --profile minimal
+          rustup target add --toolchain 1.90.0 x86_64-unknown-linux-gnu
+      - name: Compile the Linux packages
+        run: pnpm exec tauri build --ci --target x86_64-unknown-linux-gnu --bundles deb,appimage -- --locked
+      - name: Verify and package Linux downloads
+        run: python3 scripts/verify-desktop-packages.py linux
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: OpenCalendar-Linux-x64-test
+          path: ${{ runner.temp }}/OpenCalendar-desktop-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+
+  draft-release:
+    if: ${{ inputs.publish_draft }}
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Download only this run's verified desktop artifacts
+        run: |
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" --name OpenCalendar-macOS12-universal-test --dir release-assets
+          gh run download "$GITHUB_RUN_ID" --name OpenCalendar-Windows-x64-test --dir release-assets
+          gh run download "$GITHUB_RUN_ID" --name OpenCalendar-Linux-x64-test --dir release-assets
+      - name: Verify hashes and create a draft prerelease at this exact source commit
+        run: python3 scripts/create-desktop-draft-release.py release-assets

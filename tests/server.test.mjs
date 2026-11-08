@@ -45,10 +45,12 @@ async function fixture(t, options = {}) {
 
 test('desktop CORS exposes authenticated API errors only to the exact desktop origin', async (t) => {
   const f = await fixture(t);
-  const allowed = await f.request('/state', { headers: { Origin: 'tauri://localhost' } });
+  for (const origin of ['tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost']) {
+  const allowed = await f.request('/state', { headers: { Origin: origin } });
   assert.equal(allowed.status, 401);
-  assert.equal(allowed.headers.get('Access-Control-Allow-Origin'), 'tauri://localhost');
-  for (const origin of ['null', 'tauri://localhost.evil.example', 'https://evil.example']) {
+  assert.equal(allowed.headers.get('Access-Control-Allow-Origin'), origin);
+  }
+  for (const origin of ['null', 'tauri://localhost.evil.example', 'http://tauri.localhost.evil.example', 'https://evil.example']) {
     const denied = await f.request('/state', { headers: { Origin: origin } });
     assert.equal(denied.status, 401);
     assert.equal(denied.headers.get('Access-Control-Allow-Origin'), null);

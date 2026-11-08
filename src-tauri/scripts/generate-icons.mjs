@@ -24,4 +24,22 @@ const header = Buffer.alloc(8);
 header.write('icns', 0, 'ascii');
 header.writeUInt32BE(chunks.reduce((total, chunk) => total + chunk.length, 8), 4);
 await writeFile(new URL('../icons/icon.icns', import.meta.url), Buffer.concat([header, ...chunks]));
-console.log('Generated macOS icons from the existing OpenCalendar artwork.');
+// Windows ICO accepts PNG-compressed entries, including a full 256px image.
+const sizes = [16, 24, 32, 48, 64, 128, 256];
+const images = await Promise.all(sizes.map(png));
+const icoHeader = Buffer.alloc(6 + 16 * sizes.length);
+icoHeader.writeUInt16LE(1, 2);
+icoHeader.writeUInt16LE(sizes.length, 4);
+let offset = icoHeader.length;
+for (let index = 0; index < sizes.length; index++) {
+  const entry = 6 + index * 16;
+  icoHeader[entry] = sizes[index] === 256 ? 0 : sizes[index];
+  icoHeader[entry + 1] = icoHeader[entry];
+  icoHeader.writeUInt16LE(1, entry + 4);
+  icoHeader.writeUInt16LE(32, entry + 6);
+  icoHeader.writeUInt32LE(images[index].length, entry + 8);
+  icoHeader.writeUInt32LE(offset, entry + 12);
+  offset += images[index].length;
+}
+await writeFile(new URL('../icons/icon.ico', import.meta.url), Buffer.concat([icoHeader, ...images]));
+console.log('Generated native icons from the existing OpenCalendar artwork.');

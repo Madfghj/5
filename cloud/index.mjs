@@ -100,7 +100,7 @@ export function createHandler(env) {
     if (!url.pathname.startsWith('/api/')) return (await assetResponse(request)) || new Response('Not found', { status: 404 });
     const origin = request.headers.get('Origin');
     const publicUrl = (env.PUBLIC_URL || url.origin).replace(/\/$/, '');
-    const allowed = new Set((env.ALLOWED_ORIGINS || `${publicUrl},${url.origin},capacitor://localhost,tauri://localhost,https://localhost,http://localhost`).split(',').map((v) => v.trim()));
+    const allowed = new Set((env.ALLOWED_ORIGINS || `${publicUrl},${url.origin},capacitor://localhost,tauri://localhost,http://tauri.localhost,https://tauri.localhost,https://localhost,http://localhost`).split(',').map((v) => v.trim()));
     const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Vary': 'Origin' };
     if (origin && allowed.has(origin)) { headers['Access-Control-Allow-Origin'] = origin; headers['Access-Control-Allow-Credentials'] = 'true'; }
     const json = (body, status = 200, extra = {}) => new Response(JSON.stringify(body), { status, headers: { ...headers, ...extra } });

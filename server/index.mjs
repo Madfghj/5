@@ -74,7 +74,7 @@ export function createApp(options = {}) {
   const publicUrl = (env.PUBLIC_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
   const clientUrl = env.CLIENT_URL || 'http://localhost:5173';
   const nativeRedirect = env.NATIVE_REDIRECT_URL || 'space.opencalendar.app://auth';
-  const origins = new Set((env.ALLOWED_ORIGINS || `${new URL(clientUrl).origin},capacitor://localhost,tauri://localhost,http://localhost,https://localhost`).split(',').map((value) => value.trim()).filter(Boolean));
+  const origins = new Set((env.ALLOWED_ORIGINS || `${new URL(clientUrl).origin},capacitor://localhost,tauri://localhost,http://tauri.localhost,https://tauri.localhost,http://localhost,https://localhost`).split(',').map((value) => value.trim()).filter(Boolean));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
