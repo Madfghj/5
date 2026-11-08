@@ -75,7 +75,7 @@ jobs:
           cd src-tauri
           cargo metadata --locked --no-deps --format-version 1 > /dev/null
       - name: Compile the universal Monterey desktop client
-        run: pnpm exec tauri build --ci --target universal-apple-darwin --bundles app,dmg -- --locked
+        run: node node_modules/@tauri-apps/cli/tauri.js build --ci --target universal-apple-darwin --bundles app,dmg -- --locked
       - name: Verify the native binary and package the app without losing bundle metadata
         shell: bash
         run: |
@@ -159,7 +159,7 @@ jobs:
           rustup target add --toolchain 1.90.0 x86_64-pc-windows-msvc
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Compile the x64 Windows installer
-        run: pnpm exec tauri build --ci --target x86_64-pc-windows-msvc --bundles nsis -- --locked
+        run: node node_modules/@tauri-apps/cli/tauri.js build --ci --target x86_64-pc-windows-msvc --bundles nsis -- --locked
       - name: Verify and package Windows downloads
         run: python scripts/verify-desktop-packages.py windows
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -198,7 +198,7 @@ jobs:
           rustup toolchain install 1.90.0 --profile minimal
           rustup target add --toolchain 1.90.0 x86_64-unknown-linux-gnu
       - name: Compile the Linux packages
-        run: pnpm exec tauri build --ci --target x86_64-unknown-linux-gnu --bundles deb,appimage -- --locked
+        run: node node_modules/@tauri-apps/cli/tauri.js build --ci --target x86_64-unknown-linux-gnu --bundles deb,appimage -- --locked
       - name: Verify and package Linux downloads
         run: python3 scripts/verify-desktop-packages.py linux
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

@@ -115,8 +115,11 @@ elif platform == 'linux':
         extraction = Path(temporary)
         subprocess.run(['dpkg-deb', '--extract', str(deb), str(extraction)], check=True)
         packaged = extraction / 'usr/bin/opencalendar-desktop'
-        if packaged.read_bytes() != binary.read_bytes():
-            raise SystemExit('The Debian package binary differs from the compiled binary')
+        # Tauri patches each bundle's executable with its bundle type. The DEB
+        # payload need not equal the release binary after AppImage packaging.
+        if elf_machine(packaged) != 62:
+            raise SystemExit('The Debian package application must be x86_64')
+        packaged_binary_sha256 = hashlib.sha256(packaged.read_bytes()).hexdigest()
         entry = exactly_one((extraction / 'usr/share/applications').glob('*.desktop'), 'desktop entry')
         if 'x-scheme-handler/space.opencalendar.app' not in entry.read_text():
             raise SystemExit('The Debian package lacks the browser sign-in return scheme')
@@ -133,7 +136,8 @@ elif platform == 'linux':
     files = [package, image]
     report.update({'signature': 'unsigned', 'builtOn': 'Ubuntu 22.04',
                    'runtimeTestedOnOtherDistributions': False, 'debianDependencies': dependencies,
-                   'webview': 'WebKitGTK 4.1', 'sharedLibrariesResolvedOnBuildRunner': True})
+                   'webview': 'WebKitGTK 4.1', 'sharedLibrariesResolvedOnBuildRunner': True,
+                   'debianBinarySha256': packaged_binary_sha256})
 else:
     raise SystemExit('Expected windows or linux')
 
