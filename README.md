@@ -18,6 +18,8 @@ Open **Releases** in this repository and expand **Assets**. Download only the pa
 
 See the release notes and SHA-256 checksums beside the downloads. These test downloads are separate from App Store, Google Play or Microsoft Store publication. Native device testing is still in progress.
 
+For desktop sign-in with Google or Telegram, choose the provider in OpenCalendar, then enter the six-digit code shown in the app on the confirmation page in your browser. OpenCalendar completes sign-in after you confirm.
+
 ## Development
 
 Node.js 24+ and pnpm 11.25.0 are required.

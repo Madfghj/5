@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { createRemoteJWKSet, jwtVerify, SignJWT, importPKCS8, decodeJwt } from 'jose';
 import { customizationShape, customizationInput, customizationCommand } from '../cloud/customization.mjs';
 import { installEmailAuth } from './email-auth.mjs';
+import {
+  desktopCompletion, desktopConfirmation, desktopConfirmCookie, desktopConfirmCookieName, desktopConfirmPath, verificationCode,
+} from '../cloud/desktop-completion.mjs';
 
 const DAY = 86_400_000;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
@@ -94,6 +97,8 @@ export function createApp(options = {}) {
   const windows = new Map();
   const oauthPending = new Map();
   const exchangeCodes = new Map();
+  const desktopHandoffs = new Map();
+  const desktopConfirmations = new Map();
   const streams = new Set();
   let closed = false;
 
@@ -405,6 +410,93 @@ export function createApp(options = {}) {
     destination.hash = new URLSearchParams({ [key]: value }).toString();
     res.redirect(303, destination.href);
   };
+  const confirmOrigin = new URL(publicUrl).origin;
+  const confirmationSecure = !/^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(confirmOrigin);
+  const sendDesktopPage = (res, page, status = 200) => res.status(status).set(page.headers).send(page.body);
+  const clearDesktopConfirmation = (flow) => {
+    desktopConfirmations.delete(flow.stateHash);
+    delete flow.confirmation;
+    delete flow.verificationHash;
+  };
+  const finishDesktopFlow = (flow, status, error) => {
+    clearDesktopConfirmation(flow);
+    flow.status = status;
+    flow.error = error;
+  };
+  const confirmPage = (flow, csrf, error = false) => desktopConfirmation({
+    locale: flow.locale,
+    flowId: flow.stateHash,
+    csrf,
+    provider: flow.confirmation.record.provider,
+    providerName: flow.confirmation.record.name,
+    linkName: flow.userId ? selectUser.get(flow.userId)?.name : undefined,
+    error,
+  });
+  const desktopProof = (req) => {
+    limit(`desktop-status-ip:${req.socket.remoteAddress}`, 240);
+    if (!validCodeChallenge(req.body.pollToken)) throw fail(401, 'invalid_desktop_handoff');
+    const pollHash = hash(req.body.pollToken), flow = desktopHandoffs.get(pollHash);
+    if (!flow) throw fail(401, 'invalid_desktop_handoff');
+    const verifier = req.body.codeVerifier;
+    if (typeof verifier !== 'string' || !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier) || !safeEqual(createHash('sha256').update(verifier).digest('base64url'), flow.codeChallenge)) throw fail(401, 'invalid_exchange_verifier');
+    limit(`desktop-status-flow:${pollHash}`, 60);
+    if (flow.expires <= Date.now()) throw fail(401, 'oauth_expired');
+    return flow;
+  };
+  app.post('/api/auth/desktop/status', route((req, res) => {
+    const flow = desktopProof(req);
+    res.json({ status: flow.status, ...(flow.error ? { error: flow.error } : {}), expiresAt: flow.expires });
+  }));
+  app.post('/api/auth/desktop/cancel', route((req, res) => {
+    const flow = desktopProof(req);
+    limit(`desktop-cancel:${flow.pollHash}`, 10);
+    if (flow.status === 'ready' && !exchangeCodes.has(flow.pollHash)) throw fail(409, 'oauth_already_consumed');
+    finishDesktopFlow(flow, 'cancelled', 'authorization_cancelled');
+    for (const [state, pending] of oauthPending) if (pending.desktopPollHash === flow.pollHash) oauthPending.delete(state);
+    exchangeCodes.delete(flow.pollHash);
+    res.json({ status: 'cancelled', expiresAt: flow.expires });
+  }));
+  app.post(desktopConfirmPath, route((req, res) => {
+    limit(`desktop-confirm-ip:${req.socket.remoteAddress}`, 60);
+    const origin = req.get('Origin');
+    if (origin && origin !== confirmOrigin) throw fail(403, 'invalid_origin');
+    if (!req.is('application/x-www-form-urlencoded')) throw fail(415, 'invalid_content_type');
+    const { flowId, csrf, code, decision } = req.body;
+    if (typeof flowId !== 'string' || !/^[0-9a-f]{64}$/.test(flowId) || !validCodeChallenge(csrf) || !['confirm', 'deny'].includes(decision)) throw fail(400, 'invalid_desktop_confirmation');
+    const flow = desktopConfirmations.get(flowId);
+    const browserKey = cookieValue(req, desktopConfirmCookieName(flowId));
+    if (!flow || flow.status !== 'confirm' || flow.expires <= Date.now() || !validCodeChallenge(browserKey)
+      || !safeEqual(hash(browserKey), flow.confirmation.browserHash) || !safeEqual(hash(csrf), flow.confirmation.csrfHash)) {
+      return sendDesktopPage(res, desktopCompletion('error', flow?.locale), 400);
+    }
+    const clearCookie = () => res.append('Set-Cookie', desktopConfirmCookie(flowId, '', confirmationSecure, 0));
+    if (decision === 'deny') {
+      finishDesktopFlow(flow, 'cancelled', 'authorization_cancelled');
+      clearCookie();
+      return sendDesktopPage(res, desktopCompletion('cancelled', flow.locale));
+    }
+    const { record } = flow.confirmation;
+    if (typeof code !== 'string' || !/^\d{6}$/.test(code) || !safeEqual(hash(`${flowId}:${code}`), flow.verificationHash)) {
+      flow.confirmation.attempts += 1;
+      if (flow.confirmation.attempts < 5) return sendDesktopPage(res, confirmPage(flow, csrf, true), 400);
+      finishDesktopFlow(flow, 'error', 'invalid_desktop_verification_code');
+      clearCookie();
+      return sendDesktopPage(res, desktopCompletion('error', flow.locale), 400);
+    }
+    if (flow.userId && !selectUser.get(flow.userId)) {
+      finishDesktopFlow(flow, 'error', 'unauthorized');
+      clearCookie();
+      return sendDesktopPage(res, desktopCompletion('error', flow.locale), 400);
+    }
+    // This synchronous route and the synchronous exchange claim cannot interleave
+    // with cancellation between checking the flow and publishing its exchange.
+    const expires = Date.now() + 5 * 60_000;
+    exchangeCodes.set(flow.pollHash, { ...record, expires });
+    finishDesktopFlow(flow, 'ready');
+    flow.expires = expires;
+    clearCookie();
+    return sendDesktopPage(res, desktopCompletion('ready', flow.locale));
+  }));
   app.get('/api/auth/providers', (req, res) => res.json(Object.keys(providerConfigs).map((id) => ({ id, configured: configured(id) }))));
   app.post('/api/auth/:provider/start', route((req, res) => {
     const id = req.params.provider;
@@ -415,9 +507,22 @@ export function createApp(options = {}) {
     if (returnTo !== clientUrl && returnTo !== nativeRedirect) throw fail(400, 'invalid_return_url');
     const codeChallenge = req.body.codeChallenge;
     if (!validCodeChallenge(codeChallenge)) throw fail(400, 'invalid_code_challenge');
-    const ticket = secret(), state = secret();
-    oauthPending.set(state, { provider: id, ticketHash: hash(ticket), userId: user?.id || null, returnTo, codeChallenge, verifier: secret() + secret(), nonce: secret(), expires: Date.now() + 10 * 60_000 });
-    res.json({ url: `${publicUrl}/api/auth/${id}/authorize?ticket=${encodeURIComponent(ticket)}&state=${encodeURIComponent(state)}` });
+    const desktop = req.body.desktopPollHash !== undefined;
+    if (desktop && (returnTo !== nativeRedirect || !validCodeChallenge(req.body.desktopPollHash))) throw fail(400, 'invalid_desktop_handoff');
+    const locale = desktop ? req.body.locale || 'en' : 'en';
+    if (!locales.has(locale)) throw fail(400, 'invalid_locale');
+    const desktopPollHash = desktop ? Buffer.from(req.body.desktopPollHash, 'base64url').toString('hex') : null;
+    if (desktopPollHash && (desktopHandoffs.has(desktopPollHash) || exchangeCodes.has(desktopPollHash))) throw fail(409, 'desktop_handoff_exists');
+    const ticket = secret(), state = secret(), expires = Date.now() + 10 * 60_000;
+    oauthPending.set(state, { provider: id, ticketHash: hash(ticket), userId: user?.id || null, returnTo, codeChallenge, verifier: secret() + secret(), nonce: secret(), expires, desktopPollHash });
+    const url = `${publicUrl}/api/auth/${id}/authorize?ticket=${encodeURIComponent(ticket)}&state=${encodeURIComponent(state)}`;
+    if (!desktopPollHash) return res.json({ url });
+    const code = verificationCode(), stateHash = hash(state);
+    desktopHandoffs.set(desktopPollHash, {
+      pollHash: desktopPollHash, stateHash, userId: user?.id || null, codeChallenge, locale,
+      status: 'pending', expires, verificationHash: hash(`${stateHash}:${code}`),
+    });
+    return res.json({ url, expiresAt: expires, verificationCode: code });
   }));
   app.get('/api/auth/:provider/authorize', route((req, res) => {
     const id = req.params.provider, config = provider(id);
@@ -440,12 +545,20 @@ export function createApp(options = {}) {
   async function oauthCallback(req, res) {
     const id = req.params.provider, config = provider(id);
     const body = req.method === 'POST' ? req.body : req.query;
-    const state = typeof body.state === 'string' ? body.state : '';
+    const state = typeof body.state === 'string' && body.state.length < 100 ? body.state : '';
     const pending = oauthPending.get(state);
-    oauthPending.delete(state);
     if (!pending || pending.provider !== id || pending.expires < Date.now() || !pending.browserHash || !safeEqual(pending.browserHash, hash(cookieValue(req, cookieName(state)) || ''))) throw fail(400, 'invalid_oauth_state');
+    oauthPending.delete(state);
     res.clearCookie(cookieName(state), { path: callbackPath(id) });
-    if (body.error) return redirectAuth(res, pending.returnTo, 'auth_error', 'authorization_cancelled');
+    const desktopFlow = pending.desktopPollHash ? desktopHandoffs.get(pending.desktopPollHash) : null;
+    if (pending.desktopPollHash && (!desktopFlow || desktopFlow.status !== 'pending' || desktopFlow.expires <= Date.now())) {
+      return sendDesktopPage(res, desktopCompletion('cancelled', desktopFlow?.locale));
+    }
+    if (body.error) {
+      if (!desktopFlow) return redirectAuth(res, pending.returnTo, 'auth_error', 'authorization_cancelled');
+      finishDesktopFlow(desktopFlow, 'cancelled', 'authorization_cancelled');
+      return sendDesktopPage(res, desktopCompletion('cancelled', desktopFlow.locale));
+    }
     try {
       if (typeof body.code !== 'string' || body.code.length > 4096) throw fail(400, 'invalid_oauth_code');
       const payload = new URLSearchParams({ grant_type: 'authorization_code', code: body.code, client_id: config.clientId, redirect_uri: `${publicUrl}${callbackPath(id)}` });
@@ -485,11 +598,28 @@ export function createApp(options = {}) {
       }
       // Only Apple's encrypted grant is retained, solely for account-deletion revocation.
       // Defer every account/link mutation until the initiating app proves its verifier.
+      const record = { provider: id, subject, name, appleToken, linkUserId: pending.userId, expectedUserId: existing?.user_id || pending.userId, codeChallenge: pending.codeChallenge };
+      if (desktopFlow) {
+        // The app may cancel while the upstream token request is pending.
+        if (desktopFlow.status !== 'pending' || desktopFlow.expires <= Date.now()) {
+          return sendDesktopPage(res, desktopCompletion('cancelled', desktopFlow.locale));
+        }
+        const browserKey = secret(), csrf = secret();
+        desktopFlow.confirmation = { browserHash: hash(browserKey), csrfHash: hash(csrf), record, attempts: 0 };
+        desktopFlow.status = 'confirm';
+        desktopFlow.expires = Date.now() + 5 * 60_000;
+        desktopConfirmations.set(desktopFlow.stateHash, desktopFlow);
+        res.append('Set-Cookie', desktopConfirmCookie(desktopFlow.stateHash, browserKey, confirmationSecure));
+        return sendDesktopPage(res, confirmPage(desktopFlow, csrf));
+      }
       const code = secret();
-      exchangeCodes.set(hash(code), { provider: id, subject, name, appleToken, linkUserId: pending.userId, expectedUserId: existing?.user_id || pending.userId, codeChallenge: pending.codeChallenge, expires: Date.now() + 60_000 });
+      exchangeCodes.set(hash(code), { ...record, expires: Date.now() + 60_000 });
       return redirectAuth(res, pending.returnTo, 'auth_code', code);
     } catch (error) {
-      return redirectAuth(res, pending.returnTo, 'auth_error', error.code && /^[a-z_]+$/.test(error.code) ? error.code : 'authentication_failed');
+      const code = error.code && /^[a-z_]+$/.test(error.code) ? error.code : 'authentication_failed';
+      if (!desktopFlow) return redirectAuth(res, pending.returnTo, 'auth_error', code);
+      if (desktopFlow.status === 'pending' && desktopFlow.expires > Date.now()) finishDesktopFlow(desktopFlow, 'error', code);
+      return sendDesktopPage(res, desktopCompletion(desktopFlow.status === 'cancelled' ? 'cancelled' : 'error', desktopFlow.locale));
     }
   }
   app.get('/api/auth/:provider/callback', route(oauthCallback));
@@ -538,6 +668,10 @@ export function createApp(options = {}) {
     for (const [key, value] of windows) if (value.reset < now) windows.delete(key);
     for (const [key, value] of oauthPending) if (value.expires < now) oauthPending.delete(key);
     for (const [key, value] of exchangeCodes) if (value.expires < now) exchangeCodes.delete(key);
+    for (const [key, value] of desktopHandoffs) if (value.expires <= now) {
+      clearDesktopConfirmation(value);
+      desktopHandoffs.delete(key);
+    }
     db.prepare('DELETE FROM sessions WHERE expires_at<?').run(now);
   }, 60_000);
   cleanup.unref();

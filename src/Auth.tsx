@@ -3,6 +3,7 @@ import { useId, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Globe2, LockKeyhole, Mail, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
 import { dict, errorText, locales, type Locale } from './i18n';
 import './auth.css';
+import type { DesktopAuthView } from './desktop-auth';
 
 export type ProviderId = 'google' | 'apple' | 'microsoft' | 'telegram';
 export type EmailAuthInput = { name?: string; email: string; password: string };
@@ -17,9 +18,64 @@ export type AuthProps = {
   onRetryProviders?: () => void;
   busy: boolean;
   error?: string;
+  desktopAuth?: DesktopAuthView | null;
+  onCancelDesktopAuth?: () => void;
   allowDemo?: boolean;
   onExploreDemo: () => void;
 };
+
+const desktopCopy = {
+  en: {
+    opening: 'Opening your browser…',
+    waiting: 'Sign in with your provider in the browser, then enter this code on the OpenCalendar page. The app will sign you in automatically.',
+    confirm: 'Enter this code on the OpenCalendar page in your browser.',
+    reconnecting: 'Reconnecting. You can continue in your browser.',
+    completing: 'Finishing sign-in…',
+    code: 'Confirmation code',
+    cancel: 'Cancel sign-in',
+  },
+  ru: {
+    opening: 'Открываем браузер…',
+    waiting: 'Войди через выбранный сервис в браузере, затем введи этот код на странице OpenCalendar. Приложение войдёт в аккаунт автоматически.',
+    confirm: 'Введи этот код на странице OpenCalendar в браузере.',
+    reconnecting: 'Восстанавливаем соединение. Можно продолжить в браузере.',
+    completing: 'Завершаем вход…',
+    code: 'Код подтверждения',
+    cancel: 'Отменить вход',
+  },
+  de: {
+    opening: 'Browser wird geöffnet…',
+    waiting: 'Melde dich im Browser beim Anbieter an und gib danach diesen Code auf der OpenCalendar-Seite ein. Die App meldet dich automatisch an.',
+    confirm: 'Gib diesen Code auf der OpenCalendar-Seite im Browser ein.',
+    reconnecting: 'Die Verbindung wird wiederhergestellt. Du kannst im Browser fortfahren.',
+    completing: 'Anmeldung wird abgeschlossen…',
+    code: 'Bestätigungscode',
+    cancel: 'Anmeldung abbrechen',
+  },
+  fr: {
+    opening: 'Ouverture du navigateur…',
+    waiting: 'Connecte-toi au service dans le navigateur, puis saisis ce code sur la page OpenCalendar. L’application te connectera automatiquement.',
+    confirm: 'Saisis ce code sur la page OpenCalendar dans ton navigateur.',
+    reconnecting: 'Reconnexion en cours. Tu peux continuer dans le navigateur.',
+    completing: 'Finalisation de la connexion…',
+    code: 'Code de confirmation',
+    cancel: 'Annuler la connexion',
+  },
+};
+export function DesktopAuthNotice({ locale, attempt, error, onCancel }: { locale: Locale; attempt?: DesktopAuthView | null; error?: string; onCancel?: () => void }) {
+  if (!attempt) return error ? <p className="auth-form-error" role="alert">{error}</p> : null;
+  const t = desktopCopy[locale], provider = { google: 'Google', telegram: 'Telegram', microsoft: 'Microsoft', apple: 'Apple' }[attempt.provider];
+  return <section className="inline-note" style={{ padding: '16px', margin: '16px 0', border: '1px solid var(--border, #d7ddcf)', borderRadius: '8px' }}>
+    <div role="status">
+      <p style={{ margin: '0 0 12px', lineHeight: 1.6 }}><strong>{provider}</strong><br/>{t[attempt.phase]}</p>
+      {attempt.verificationCode && attempt.phase !== 'completing' && <p>
+        <span>{t.code}</span><br/>
+        <code style={{ fontSize: '1.75rem', fontWeight: 700, letterSpacing: '0.12em' }}>{attempt.verificationCode}</code>
+      </p>}
+    </div>
+    {attempt.phase !== 'completing' && <button type="button" className="text-button" onClick={onCancel}>{t.cancel}</button>}
+  </section>;
+}
 
 function AuthMark() {
   return <img className="auth-mark" src="/icon-192.png" width="47" height="47" alt="" aria-hidden="true"/>;
@@ -48,7 +104,7 @@ export function AuthPanel(props: AuthProps) {
   const [guestName,setGuestName] = useState('');
   const [error,setError] = useState('');
   const [pending,setPending] = useState(false);
-  const working = busy || pending;
+  const working = busy || pending || !!props.desktopAuth;
   const mismatch = mode==='register' && repeat.length>0 && repeat!==password;
 
   async function perform(action: () => Promise<void>) {
@@ -69,6 +125,7 @@ export function AuthPanel(props: AuthProps) {
   }
 
   return <div className="auth-panel">
+    <DesktopAuthNotice locale={locale} attempt={props.desktopAuth} onCancel={props.onCancelDesktopAuth}/>
     <div className="auth-panel-heading"><h2>{mode==='register'?t.createAccount:t.signIn}</h2></div>
     <div className="auth-mode-tabs" role="group" aria-label={t.account}><button type="button" aria-pressed={mode==='register'} className={mode==='register'?'active':''} disabled={working} onClick={()=>{setMode('register');setError('');}}>{t.createAccount}</button><button type="button" aria-pressed={mode==='login'} className={mode==='login'?'active':''} disabled={working} onClick={()=>{setMode('login');setError('');}}>{t.signIn}</button></div>
     <form className="auth-email-form" onSubmit={submit}>
@@ -96,12 +153,12 @@ export function AuthPanel(props: AuthProps) {
 export function WelcomeFlow(props: AuthProps) {
   const {locale,onLocaleChange,onExploreDemo,busy} = props;
   const t = dict[locale];
-  const [step,setStep] = useState<'language'|'account'>('language');
+  const [step,setStep] = useState<'language'|'account'>(props.desktopAuth ? 'account' : 'language');
   const order: Locale[] = ['en','ru','de','fr'];
   return <main className="welcome-page">
     <section className="welcome-story"><a className="welcome-brand" href="#" onClick={e=>e.preventDefault()} aria-label="OpenCalendar.space"><AuthMark/><span>OpenCalendar<span>.space</span></span></a><div className="welcome-story-copy"><h1>{t.calendar}</h1><p>{locale==='ru'?'Общий календарь для групп. Выбери день и отметь удобное время.':locale==='de'?'Gemeinsamer Kalender für Gruppen. Wähle einen Tag und eine Uhrzeit.':locale==='fr'?'Un calendrier de groupe. Choisissez un jour et une heure.':'Shared calendar for groups. Choose a day and a time.'}</p><CalendarIllustration/></div></section>
     <section className="welcome-form-side"><DownloadButton locale={locale} className="welcome-download"/><div className="welcome-topline"><div className="welcome-progress" aria-label={t.onboardingProgress}><span className="complete">01</span><i/><span className={step==='account'?'complete':''}>02</span></div>{step==='account'&&<button type="button" className="welcome-back" disabled={busy} onClick={()=>setStep('language')}><ArrowLeft size={14}/>{t.language}</button>}</div>
-      <div className="welcome-form-card">{step==='language'?<div className="language-step"><div className="language-globe"><Globe2 size={25}/></div><h2>{t.chooseLanguageTitle}</h2><p>{t.chooseLanguageSubtitle}</p><div className="welcome-languages" role="group" aria-label={t.language}>{order.map(code=>{const choice=locales.find(item=>item.code===code)!;return <button type="button" key={code} lang={code} aria-pressed={locale===code} className={locale===code?'selected':''} onClick={()=>onLocaleChange(code)}><span className="language-symbol" aria-hidden="true"><Globe2 size={19}/></span><span><strong>{choice.label}</strong></span><span className="language-check">{locale===code&&<Check size={15}/>}</span></button>;})}</div><button className="auth-submit" type="button" onClick={()=>setStep('account')}>{t.continueButton}<ArrowRight size={17}/></button>{props.allowDemo&&<button className="auth-demo-link" type="button" onClick={onExploreDemo}><Sparkles size={14}/>{t.exploreDemo}<ArrowRight size={14}/></button>}<p className="welcome-language-note">{t.changeLanguageLater}</p></div>:<AuthPanel {...props}/>}</div>
+      <div className="welcome-form-card">{step==='language'&&<><DesktopAuthNotice locale={locale} attempt={props.desktopAuth} onCancel={props.onCancelDesktopAuth}/>{props.error&&<p className="auth-form-error" role="alert">{props.error}</p>}</>}{step==='language'?<div className="language-step"><div className="language-globe"><Globe2 size={25}/></div><h2>{t.chooseLanguageTitle}</h2><p>{t.chooseLanguageSubtitle}</p><div className="welcome-languages" role="group" aria-label={t.language}>{order.map(code=>{const choice=locales.find(item=>item.code===code)!;return <button type="button" key={code} lang={code} aria-pressed={locale===code} className={locale===code?'selected':''} onClick={()=>onLocaleChange(code)}><span className="language-symbol" aria-hidden="true"><Globe2 size={19}/></span><span><strong>{choice.label}</strong></span><span className="language-check">{locale===code&&<Check size={15}/>}</span></button>;})}</div><button className="auth-submit" type="button" onClick={()=>setStep('account')}>{t.continueButton}<ArrowRight size={17}/></button>{props.allowDemo&&<button className="auth-demo-link" type="button" onClick={onExploreDemo}><Sparkles size={14}/>{t.exploreDemo}<ArrowRight size={14}/></button>}<p className="welcome-language-note">{t.changeLanguageLater}</p></div>:<AuthPanel {...props}/>}</div>
     </section>
   </main>;
 }

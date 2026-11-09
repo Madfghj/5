@@ -6,7 +6,7 @@ import { Browser } from '@capacitor/browser';
 import { Share } from '@capacitor/share';
 import { dict, errorText, localeTags, type Locale } from './i18n';
 import LanguagePicker from './LanguagePicker';
-import { AuthPanel, WelcomeFlow, type AuthProps } from './Auth';
+import { AuthPanel, WelcomeFlow, DesktopAuthNotice, type AuthProps } from './Auth';
 import ContactsForm from './Contacts';
 import { MemberContacts } from './Contacts';
 import DayAvailabilityForm from './DayAvailability';
@@ -14,10 +14,11 @@ import CustomizationPanel,{AdvancedPreferences,PixelAvatar} from './Customizatio
 import ServiceHub from './ServiceHub';
 import PresenceControl,{PresenceDot,usePresence} from './Presence';
 import { api, ApiError, createSession, getState, live, native, providers } from './api';
-import { AUTH_RETURN_URL, copyDesktopText, desktop, desktopAuthCallback, desktopPkceChallenge, observeDesktopAuth, observeDesktopWindow, openDesktopHttps, saveDesktopCalendar } from './desktop';
+import { AUTH_RETURN_URL, copyDesktopText, desktop, desktopAuthCallback, observeDesktopAuth, observeDesktopWindow, openDesktopHttps, saveDesktopCalendar } from './desktop';
 import { addDays, counts, dateKey, icsText, monthDays, parseDate, sortedEvents, timeSlots, weekDays } from './calendar';
 import { createDemo } from './demo';
 import { bootstrapSession } from './bootstrap';
+import { createDesktopAuthController, type DesktopAuthView } from './desktop-auth';
 import type { CalendarEvent, Customization, DayAvailability, EventInput, Group, PresenceStatus, Provider, ResponseValue, Snapshot } from './types';
 
 const STORAGE = 'opencalendar.v1';
@@ -81,8 +82,73 @@ export default function App() {
   useEffect(()=>{if(!token){setConnected(false);return;}setLoading(true);const controller=new AbortController();let first=true;void live(token,controller.signal,async()=>{if(first)await presenceReady.current;if(controller.signal.aborted)return false;const ok=await fetchState(!first);if(first&&!controller.signal.aborted){first=false;setLoading(false);}return ok;},setConnected);return()=>controller.abort();},[token,fetchState,presenceReady]);
   const handlingAuth=useRef(false);
   const launchUrlRead=useRef(false);
-  const acceptAuth=useCallback(async(url:string)=>{if(desktop&&(!desktopAuthCallback(url)||!read<string>('oc.authVerifier','')))return;const fragment=url.split('#')[1];if(!fragment||handlingAuth.current)return;const params=new URLSearchParams(fragment);const code=params.get('auth_code'),error=params.get('auth_error');if(!code&&!error)return;handlingAuth.current=true;try{setBusy(true);if(error){notify(errorText(locale,error));return;}const codeVerifier=read<string>('oc.authVerifier','');const result=await api<{token:string;user:Snapshot['user']}>('/auth/exchange',null,{code,codeVerifier});write('oc.token',result.token);currentToken.current=result.token;setSnapshot(current=>current.user.id===result.user.id?{...current,user:result.user}:{user:result.user,groups:[],events:[]});setToken(result.token);setActiveGroup('all');setDemoEnabled(false);write('oc.demo',false);setOnboarding(false);write('oc.onboarding',true);close();}catch(error){notify(error instanceof ApiError?errorText(locale,error.code):dict[locale].networkError);}finally{write('oc.authVerifier',null);if(native&&!desktop)await Browser.close().catch(()=>{});else if(!desktop)history.replaceState(null,'',location.pathname+location.search);setBusy(false);handlingAuth.current=false;}},[close,locale,notify]);
-  useEffect(()=>{if(desktop)return observeDesktopAuth(url=>void acceptAuth(url),()=>notify(dict[locale].networkError));void acceptAuth(location.href);if(!native)return;const listener=NativeApp.addListener('appUrlOpen',event=>void acceptAuth(event.url));if(!launchUrlRead.current){launchUrlRead.current=true;void NativeApp.getLaunchUrl().then(result=>{if(result)void acceptAuth(result.url);});}return()=>{void listener.then(handle=>handle.remove());};},[acceptAuth,locale,notify]);
+  type AuthSession = { token: string; user: Snapshot['user'] };
+  const [desktopAuthError,setDesktopAuthError]=useState('');
+  const finishSignIn=useCallback((result:AuthSession)=>{
+    write('oc.token',result.token);
+    write('oc.authVerifier',null);
+    currentToken.current=result.token;
+    setSnapshot(current=>current.user.id===result.user.id?{...current,user:result.user}:{user:result.user,groups:[],events:[]});
+    setToken(result.token);
+    setActiveGroup('all');
+    setDemoEnabled(false);
+    write('oc.demo',false);
+    setOnboarding(false);
+    write('oc.onboarding',true);
+    setDesktopAuthError('');
+    close();
+  },[close]);
+  const finishDesktopSignIn=useRef(finishSignIn);
+  finishDesktopSignIn.current=finishSignIn;
+  const [desktopController]=useState(()=>desktop?createDesktopAuthController<AuthSession>({
+    load:()=>read('oc.desktopAuth',null),save:value=>write('oc.desktopAuth',value),
+    start:(provider,body,signal)=>api('/auth/'+provider+'/start',currentToken.current,body,undefined,signal),
+    status:(proof,signal)=>api('/auth/desktop/status',null,proof,undefined,signal),
+    exchange:(proof,signal)=>api('/auth/exchange',null,proof,undefined,signal),
+    cancel:(proof,signal)=>api('/auth/desktop/cancel',null,proof,undefined,signal),
+    open:openDesktopHttps,complete:result=>finishDesktopSignIn.current(result),error:setDesktopAuthError,
+  }):null);
+  const [desktopAuth,setDesktopAuth]=useState<DesktopAuthView|null>(()=>desktopController?.getView()||null);
+  useEffect(()=>desktopController?.subscribe(setDesktopAuth),[desktopController]);
+
+  const acceptAuth=useCallback(async(url:string):Promise<boolean>=>{
+    if(handlingAuth.current||desktopController?.hasPending())return false;
+    const codeVerifier=read<string>('oc.authVerifier','');
+    const parsed=desktop?desktopAuthCallback(url):null;
+    if(desktop&&(!parsed||!codeVerifier))return false;
+    const fragment=url.split('#')[1];
+    if(!fragment)return false;
+    const params=new URLSearchParams(fragment);
+    const code=params.get('auth_code'),error=params.get('auth_error');
+    if(!code&&!error)return false;
+    handlingAuth.current=true;
+    let clearProof=!desktop;
+    const showError=(code:string)=>{
+      if(desktop)setDesktopAuthError(code);
+      else notify(errorText(locale,code));
+    };
+    try{
+      setBusy(true);
+      if(error){clearProof=true;showError(error);return true;}
+      const result=await api<AuthSession>('/auth/exchange',null,{code,codeVerifier});
+      finishSignIn(result);
+      clearProof=true;
+      return true;
+    }catch(cause){
+      if(desktop&&cause instanceof ApiError&&cause.status>=400&&cause.status<500&&![408,429].includes(cause.status))clearProof=true;
+      if(cause instanceof ApiError)showError(cause.code);
+      else if(desktop)showError('desktop_auth_network_error');
+      else notify(dict[locale].networkError);
+      return clearProof;
+    }finally{
+      if(clearProof)write('oc.authVerifier',null);
+      if(native&&!desktop)await Browser.close().catch(()=>{});
+      else if(!desktop)history.replaceState(null,'',location.pathname+location.search);
+      setBusy(false);
+      handlingAuth.current=false;
+    }
+  },[desktopController,finishSignIn,locale,notify]);
+  useEffect(()=>{if(desktop)return observeDesktopAuth(url=>acceptAuth(url),()=>notify(dict[locale].networkError));void acceptAuth(location.href);if(!native)return;const listener=NativeApp.addListener('appUrlOpen',event=>void acceptAuth(event.url));if(!launchUrlRead.current){launchUrlRead.current=true;void NativeApp.getLaunchUrl().then(result=>{if(result)void acceptAuth(result.url);});}return()=>{void listener.then(handle=>handle.remove());};},[acceptAuth,locale,notify]);
   // Resume a live connection after the native app returns to the foreground.
   useEffect(()=>{if(!native||desktop)return;const listener=NativeApp.addListener('appStateChange',({isActive})=>{if(isActive)void fetchState();});return()=>{void listener.then(handle=>handle.remove());};},[fetchState]);
   useEffect(()=>{if(!desktop)return;const watcher=observeDesktopWindow({focus:focused=>{if(focused){refreshProviders();void fetchState();}}});return watcher.dispose;},[fetchState,refreshProviders]);
@@ -104,9 +170,31 @@ export default function App() {
   const today=dateKey(new Date());
   function navigate(direction:number) {const next=view==='week'?addDays(date,direction*7):new Date(date.getFullYear(),date.getMonth()+direction,1,12);setDate(next);setSelectedDate(dateKey(next));}
   function chooseLocale(value:Locale) {if(demo){const oldSeed=createDemo(locale),newSeed=createDemo(value);setSnapshot(s=>({...s,user:{...s.user,locale:value,name:s.user.name===oldSeed.user.name?newSeed.user.name:s.user.name},groups:s.groups.map(g=>{const i=oldSeed.groups.findIndex(seed=>seed.id===g.id);return i>=0&&g.name===oldSeed.groups[i].name?{...g,name:newSeed.groups[i].name}:g;}),events:s.events.map(e=>{const i=oldSeed.events.findIndex(seed=>seed.id===e.id);if(i<0)return e;const old=oldSeed.events[i],next=newSeed.events[i];return {...e,title:e.title===old.title?next.title:e.title,location:e.location===old.location?next.location:e.location,notes:e.notes===old.notes?next.notes:e.notes};})}));}else void api('/profile',token,{locale:value},'PATCH').catch(()=>{});setLocale(value);}
-  function logout() {currentToken.current=null;requestVersion.current++;write('oc.token',null);write('oc.demo',false);setToken(null);setDemoEnabled(false);setOnboarding(true);setSnapshot({user:{id:'',name:'',locale},groups:[],events:[]});setActiveGroup('all');close();}
-  async function signIn(id:Provider['id']) {if(!providerList.find(p=>p.id===id)?.configured){notify(errorText(locale,'provider_not_configured'));return;}await mutation(async()=>{const base64url=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');const verifier=base64url(crypto.getRandomValues(new Uint8Array(32)));const challenge=desktop?desktopPkceChallenge(verifier):base64url(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))));write('oc.authVerifier',verifier);const result=await api<{url:string}>(`/auth/${id}/start`,token,{codeChallenge:challenge,...(native||desktop?{returnTo:AUTH_RETURN_URL}:{})});if(desktop)await openDesktopHttps(result.url);else if(native)await Browser.open({url:result.url});else location.assign(result.url);});}
-  async function enterLive(name:string) {await mutation(async()=>{const result=await createSession(name,locale);write('oc.token',result.token);currentToken.current=result.token;setSnapshot({user:result.user,groups:[],events:[]});setToken(result.token);setActiveGroup('all');setDemoEnabled(false);write('oc.demo',false);setOnboarding(false);write('oc.onboarding',true);close();});}
+  function logout() {void desktopController?.cancel();setDesktopAuthError('');currentToken.current=null;requestVersion.current++;write('oc.token',null);write('oc.demo',false);setToken(null);setDemoEnabled(false);setOnboarding(true);setSnapshot({user:{id:'',name:'',locale},groups:[],events:[]});setActiveGroup('all');close();}
+  async function signIn(id:Provider['id']) {
+    if(!providerList.find(p=>p.id===id)?.configured){
+      if(desktopController)setDesktopAuthError('provider_not_configured');
+      else notify(errorText(locale,'provider_not_configured'));
+      return;
+    }
+    if(desktopController){
+      if(busy||handlingAuth.current||desktopController.hasPending())return;
+      setDesktopAuthError('');
+      write('oc.authVerifier',null);
+      await desktopController.begin(id,locale);
+      return;
+    }
+    await mutation(async()=>{
+      const base64url=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+      const verifier=base64url(crypto.getRandomValues(new Uint8Array(32)));
+      const challenge=base64url(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))));
+      write('oc.authVerifier',verifier);
+      const result=await api<{url:string}>(`/auth/${id}/start`,token,{codeChallenge:challenge,...(native?{returnTo:AUTH_RETURN_URL}:{})});
+      if(native)await Browser.open({url:result.url});
+      else location.assign(result.url);
+    });
+  }
+  async function enterLive(name:string) {if(desktopController?.hasPending())return;setDesktopAuthError('');await mutation(async()=>{const result=await createSession(name,locale);write('oc.token',result.token);currentToken.current=result.token;setSnapshot({user:result.user,groups:[],events:[]});setToken(result.token);setActiveGroup('all');setDemoEnabled(false);write('oc.demo',false);setOnboarding(false);write('oc.onboarding',true);close();});}
   async function respond(event:CalendarEvent,value:ResponseValue) {if(demo){setSnapshot(s=>({...s,events:s.events.map(e=>e.id===event.id?{...e,responses:{...e.responses,[s.user.id]:value}}:e)}));return;}await mutation(()=>api(`/events/${event.id}/response`,token,{value},'PUT'));}
   function openDay(day:string) {setSelectedDate(day);setModal({kind:'day'});}
   async function saveAvailability(input:Omit<DayAvailability,'userId'|'updatedAt'>) {
@@ -124,8 +212,9 @@ export default function App() {
   async function leaveGroup(group:Group) {if(demo){setSnapshot(s=>({...s,groups:s.groups.filter(g=>g.id!==group.id),events:s.events.filter(e=>e.groupId!==group.id)}));setActiveGroup('all');close();return;}if(await mutation(()=>api(`/groups/${group.id}/membership`,token,undefined,'DELETE'))){setActiveGroup('all');close();}}
   async function copyInvite(group:Group) {if(demo){notify(t.demoNotice);return;}try{if(desktop){await copyDesktopText(group.inviteCode);notify(t.copied);}else if(native){await Share.share({title:group.name,text:`${group.name}\n${t.inviteCode}: ${group.inviteCode}`,dialogTitle:t.invite});}else{await navigator.clipboard.writeText(group.inviteCode);notify(t.copied);}}catch{notify(t.error);}}
   async function exportEvents(list:CalendarEvent[]) {if(desktop){try{if(await saveDesktopCalendar(icsText(list)))notify(t.genericSuccess);}catch{notify(t.error);}return;}const url=URL.createObjectURL(new Blob([icsText(list)],{type:'text/calendar;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='OpenCalendar.ics';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-  async function emailAuth(mode:'register'|'login',input:{name?:string;email:string;password:string}) {await mutation(async()=>{const result=await api<{token:string;user:Snapshot['user']}>(`/auth/email/${mode}`,null,{...input,locale});write('oc.token',result.token);currentToken.current=result.token;setSnapshot({user:result.user,groups:[],events:[]});setToken(result.token);setActiveGroup('all');setDemoEnabled(false);write('oc.demo',false);setOnboarding(false);write('oc.onboarding',true);close();});}
-  const authProps:AuthProps={locale,onLocaleChange:chooseLocale,onGuest:enterLive,onEmail:emailAuth,onProvider:signIn,providers:providerList,providersStatus:providerStatus,onRetryProviders:refreshProviders,busy,error:toast,allowDemo:DEMO_AVAILABLE,onExploreDemo:()=>{if(!DEMO_AVAILABLE)return;setSnapshot(read<Snapshot|null>(STORAGE,null)||createDemo(locale));setDemoEnabled(true);write('oc.demo',true);setOnboarding(false);write('oc.onboarding',true);close();}};
+  async function emailAuth(mode:'register'|'login',input:{name?:string;email:string;password:string}) {if(desktopController?.hasPending())return;setDesktopAuthError('');await mutation(async()=>{const result=await api<{token:string;user:Snapshot['user']}>(`/auth/email/${mode}`,null,{...input,locale});write('oc.token',result.token);currentToken.current=result.token;setSnapshot({user:result.user,groups:[],events:[]});setToken(result.token);setActiveGroup('all');setDemoEnabled(false);write('oc.demo',false);setOnboarding(false);write('oc.onboarding',true);close();});}
+  const desktopErrorText=desktopAuthError?errorText(locale,desktopAuthError):'';
+  const authProps:AuthProps={locale,onLocaleChange:chooseLocale,onGuest:enterLive,onEmail:emailAuth,onProvider:signIn,providers:providerList,providersStatus:providerStatus,onRetryProviders:refreshProviders,busy,error:desktopErrorText||toast,desktopAuth,onCancelDesktopAuth:()=>void desktopController?.cancel(),allowDemo:DEMO_AVAILABLE,onExploreDemo:()=>{if(!DEMO_AVAILABLE)return;setSnapshot(read<Snapshot|null>(STORAGE,null)||createDemo(locale));setDemoEnabled(true);write('oc.demo',true);setOnboarding(false);write('oc.onboarding',true);close();}};
   const ResponseButtons=({event,compact=false}:{event:CalendarEvent;compact?:boolean})=><div className={`responses ${compact?'compact':''}`} role="group" aria-label={t.yourResponse}>{(['yes','maybe','no'] as const).map(value=><button key={value} className={`response response-${value} ${event.responses[snapshot.user.id]===value?'selected':''}`} aria-pressed={event.responses[snapshot.user.id]===value} disabled={busy} onClick={()=>void respond(event,value)}><span>{value==='yes'?<Check size={15}/>:value==='no'?<X size={15}/>:<span className="question-mark">?</span>}</span>{t[value]}</button>)}</div>;
   const ResponseNames=({event}:{event:CalendarEvent})=><div className="response-names">{(['yes','maybe','no'] as const).map(value=>{const names=groupFor(event)?.members.filter(member=>event.responses[member.id]===value).map(member=>member.name)||[];return names.length?<span key={value} className={`answer-name answer-${value}`} title={`${t[value]}: ${names.join(', ')}`}><span aria-hidden="true">{value==='yes'?'✓':value==='no'?'×':'?'}</span><span>{names.join(', ')}</span></span>:null;})}</div>;
   const EventRow=({event}:{event:CalendarEvent})=>{const group=groupFor(event);return <button className="event-row" onClick={()=>setModal({kind:'event',eventId:event.id})}><span className="event-date"><strong>{parseDate(event.date).getDate()}</strong><small>{formatDate(event.date,{month:'short'})}</small></span><span className="event-row-body"><strong>{event.title}</strong><small><span className="color-dot" style={{background:group?.color}}/>{group?.name}<span>·</span>{event.startTime}</small></span><ChevronRight size={17}/></button>;};
@@ -146,6 +235,7 @@ export default function App() {
     </aside>
     <div className="app-body" inert={modal?true:undefined}><header className="topbar"><div className="breadcrumb"><button className="icon-button mobile-menu" aria-label="Menu" onClick={()=>setMenu(true)}><Menu size={21}/></button><button type="button" className="breadcrumb-root" onClick={()=>setModal({kind:demo?'login':'customize'})}>{t.workspace}</button><span className="breadcrumb-slash">/</span><strong>{page==='calendar'?t.calendar:t.groups}</strong></div><div className="topbar-actions"><span className={`connection-pill ${demo?'demo':connected?'online':'offline'}`}><span/>{demo?t.demonstration:connected?t.live:t.reconnecting}</span><LanguagePicker locale={locale} onChange={chooseLocale} compact/><button className="icon-button services-button" aria-label={locale==='ru'?'Сервисы':locale==='de'?'Dienste':locale==='fr'?'Services':'Services'} title={locale==='ru'?'Сервисы':locale==='de'?'Dienste':'Services'} onClick={()=>setModal({kind:'services'})}><Link2 size={20}/><span className="services-label">{locale==='ru'?'Сервисы':locale==='de'?'Dienste':'Services'}</span></button><button className="profile-button" aria-label={t.profile} onClick={()=>setModal({kind:demo?'login':'customize'})}><Avatar name={snapshot.user.name} presence={snapshot.user.presence?.status} variant={snapshot.user.customization?.avatar}/></button></div></header>
     <main className={page==='calendar'?'calendar-page':undefined}>
+      {modal?.kind!=='services'&&modal?.kind!=='login'&&<DesktopAuthNotice locale={locale} attempt={desktopAuth} onCancel={()=>void desktopController?.cancel()} error={desktopErrorText}/>}
       <div className="page-heading"><div><h1>{page==='calendar'?t.calendar:t.groups}</h1>{page==='groups'&&<p>{locale==='ru'?'Твои группы и приглашения.':locale==='de'?'Deine Gruppen und Einladungen.':locale==='fr'?'Vos groupes et invitations.':'Your groups and invitations.'}</p>}</div><div className="desktop-action">{page==='calendar'&&<button className="button primary" onClick={()=>openDay(selectedDate)}><Plus size={17}/>{dayText.mark}</button>}</div></div>
       {demo&&<div className="demo-banner"><span><Sparkles size={15}/>{t.demoNotice}</span><button onClick={()=>setModal({kind:'login'})}>{t.demoCTA}<ArrowRight size={14}/></button></div>}
       {loading&&<div className="loading-line" role="status">{t.loading}</div>}
@@ -181,7 +271,7 @@ export default function App() {
       {modal.kind==='invite'&&<div className="modal-content">{selectedGroup?<><div className="invite-group-heading"><span className="group-emoji" style={{background:`${selectedGroup.color}20`}}>{selectedGroup.emoji}</span><h3>{selectedGroup.name}</h3></div><p className="muted">{t.joinHint}</p><span className="input-label">{t.inviteCode}</span><div className="invite-code"><code>{selectedGroup.inviteCode}</code><button className="icon-button" onClick={()=>void copyInvite(selectedGroup)} aria-label={t.copyCode}><Copy size={20}/></button></div>{demo&&<p className="inline-note">{t.demoNotice}</p>}<button className="button primary full" onClick={()=>demo?setModal({kind:'login'}):void copyInvite(selectedGroup)}>{demo?t.demoCTA:t.copyCode}<Copy size={16}/></button><h3 className="form-section-title">{t.members} · {selectedGroup.memberCount}</h3><div className="participant-list">{selectedGroup.members.map((member,index)=><div key={member.id}><Avatar presence={member.presence} variant={member.avatar} name={member.name} index={index} small/><span>{member.name}</span><MemberContacts contacts={member.contacts}/></div>)}</div></>:<><Empty text={t.emptyGroups} hint={t.groupRequired}/><button className="button primary full" onClick={()=>setModal({kind:'newGroup'})}>{t.createGroup}<Plus size={17}/></button></>}</div>}
       {modal.kind==='login'&&<div className="modal-content"><AuthPanel {...authProps}/></div>}
       {modal.kind==='customize'&&<CustomizationPanel locale={locale} user={snapshot.user} busy={busy} onLocaleChange={chooseLocale} onSave={input=>mutation(()=>api('/profile',token,input,'PATCH'),t.genericSuccess)}/>}
-      {modal.kind==='services'&&<ServiceHub locale={locale} user={snapshot.user} providers={providerList} busy={busy} onProvider={id=>void signIn(id)} onSaveSignal={url=>mutation(()=>api('/profile',token,{contacts:{...(snapshot.user.contacts||{}),signal:url}},'PATCH'),t.genericSuccess)} onLinkEmail={input=>mutation(()=>api('/auth/email/link',token,input),t.genericSuccess)}/>}
+      {modal.kind==='services'&&<><DesktopAuthNotice locale={locale} attempt={desktopAuth} onCancel={()=>void desktopController?.cancel()} error={desktopErrorText}/><ServiceHub locale={locale} user={snapshot.user} providers={providerList} busy={busy||!!desktopAuth} onProvider={id=>void signIn(id)} onSaveSignal={url=>mutation(()=>api('/profile',token,{contacts:{...(snapshot.user.contacts||{}),signal:url}},'PATCH'),t.genericSuccess)} onLinkEmail={input=>mutation(()=>api('/auth/email/link',token,input),t.genericSuccess)}/></>}
       {modal.kind==='settings'&&<div className="modal-content advanced-settings"><PresenceControl locale={locale} presence={snapshot.user.presence} busy={busy} onChange={mode=>void mutation(()=>api('/presence',token,{mode},'PATCH'))}/><AdvancedPreferences locale={locale} customization={personal} busy={busy} onSave={customization=>mutation(()=>api('/profile',token,{customization},'PATCH'),t.genericSuccess)}/>{!native&&<button className="button secondary full" disabled={!events.length} onClick={()=>exportEvents(events)}><ArrowDownToLine size={17}/>{t.exportCalendar}</button>}<details className="advanced-contact-settings"><summary>{locale==='ru'?'Контактные ссылки':locale==='de'?'Kontaktlinks':locale==='fr'?'Liens de contact':'Contact links'}</summary><ContactsForm locale={locale} contacts={snapshot.user.contacts||{}} busy={busy} onSave={async contacts=>{await mutation(()=>api('/profile',token,{contacts},'PATCH'),t.genericSuccess);}}/></details><div className="settings-bottom"><button className="text-button" onClick={()=>setModal({kind:'signOut'})}><LogOut size={17}/>{t.logout}</button><button className="text-button danger-text" onClick={()=>setModal({kind:'deleteAccount'})}><Trash2 size={16}/>{t.deleteAccount}</button></div></div>}
 
       {modal.kind==='deleteEvent'&&selectedEvent&&<Confirm text={t.confirmDeleteEvent} label={t.delete} cancel={t.cancel} busy={busy} onCancel={close} onConfirm={()=>void removeEvent(selectedEvent)}/>}

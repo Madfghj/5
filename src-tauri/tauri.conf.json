@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OpenCalendar",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "identifier": "space.opencalendar.app",
   "build": {
     "beforeDevCommand": "pnpm run dev:desktop",

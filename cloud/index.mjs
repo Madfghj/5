@@ -1,5 +1,6 @@
 import { assetResponse } from './assets.generated.mjs';
 import { handleAuth, revokeApple } from './auth.mjs';
+import { desktopConfirmPath } from './desktop-completion.mjs';
 import { hash, secret } from './crypto.mjs';
 import { customizationShape, customizationInput, customizationCommand } from './customization.mjs';
 import { fail, text, locales, responses, colors, eventInput, contactLinks, availabilityInput, validDate } from './validation.mjs';
@@ -106,7 +107,8 @@ export function createHandler(env) {
     const json = (body, status = 200, extra = {}) => new Response(JSON.stringify(body), { status, headers: { ...headers, ...extra } });
     try {
       const appleFormPost = request.method === 'POST' && url.pathname === '/api/auth/apple/callback';
-      if (origin && !allowed.has(origin) && !appleFormPost) throw fail(403, 'invalid_origin');
+      const desktopFormPost = request.method === 'POST' && url.pathname === desktopConfirmPath && origin === new URL(publicUrl).origin;
+      if (origin && !allowed.has(origin) && !appleFormPost && !desktopFormPost) throw fail(403, 'invalid_origin');
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...headers, 'Access-Control-Allow-Methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Authorization,Content-Type', 'Access-Control-Max-Age': '600' } });
       const ip = request.headers.get('CF-Connecting-IP') || 'local';
       await limit(`ip:${ip}`, Number(env.RATE_LIMIT_PER_MINUTE) || 500);
@@ -115,7 +117,7 @@ export function createHandler(env) {
       const authResponse = await handleAuth(context);
       if (authResponse) return authResponse;
       const path = url.pathname, method = request.method;
-      if (path === '/api/health' && method === 'GET') return json({ ok: true, version: '0.3.3', liveMode: 'polling', pollIntervalMs: 5000 });
+      if (path === '/api/health' && method === 'GET') return json({ ok: true, version: '0.3.4', liveMode: 'polling', pollIntervalMs: 5000 });
       if (path === '/api/session' && method === 'POST') {
         await limit(`session:${ip}`, 20, 3_600_000);
         const name = text(body.name, 60), locale = body.locale || 'en';

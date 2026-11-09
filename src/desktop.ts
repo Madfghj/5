@@ -33,7 +33,7 @@ export function externalHttpsUrl(value: string): string {
 export function desktopAuthCallback(value: string): { url: string; code: string | null; error: string | null } | null {
   try {
     const url = new URL(value);
-    if (`${url.protocol}//${url.host}${url.pathname}` !== AUTH_RETURN_URL || url.username || url.password || url.search) return null;
+    if (`${url.protocol}//${url.host}` !== AUTH_RETURN_URL || !['', '/'].includes(url.pathname) || url.username || url.password || url.search) return null;
     const params = new URLSearchParams(url.hash.slice(1));
     const code = params.get('auth_code'), error = params.get('auth_error');
     if ([...params].length !== 1 || (code ? !/^[A-Za-z0-9_-]{43,200}$/.test(code) : !error || !/^[a-z_]{1,100}$/.test(error))) return null;
@@ -51,9 +51,9 @@ type LinkSource = {
 // a locale change resubscribes the listener.
 export function createDesktopAuthSubscription(source: LinkSource) {
   let coldUrls: Promise<string[] | null> | undefined, coldDelivered = false;
-  const consumedCodes = new Set<string>();
+  const consumedCodes = new Set<string>(), inFlightCodes = new Set<string>();
   let lastError = '', lastErrorAt = 0;
-  return (handler: (url: string) => void, onError: (error: unknown) => void = () => {}) => {
+  return (handler: (url: string) => void | boolean | Promise<void | boolean>, onError: (error: unknown) => void = () => {}) => {
     let disposed = false, unlisten: Unlisten | undefined;
     const deliver = (urls: string[]) => {
       if (disposed) return;
@@ -61,9 +61,16 @@ export function createDesktopAuthSubscription(source: LinkSource) {
         const callback = desktopAuthCallback(value);
         if (!callback) continue;
         if (callback.code) {
-          if (consumedCodes.has(callback.code)) continue;
-          consumedCodes.add(callback.code);
-          if (consumedCodes.size > 64) consumedCodes.delete(consumedCodes.values().next().value!);
+          if (consumedCodes.has(callback.code) || inFlightCodes.has(callback.code)) continue;
+          const code = callback.code;
+          inFlightCodes.add(code);
+          void Promise.resolve().then(() => handler(callback.url)).then(accepted => {
+            if (accepted !== false) {
+              consumedCodes.add(code);
+              if (consumedCodes.size > 64) consumedCodes.delete(consumedCodes.values().next().value!);
+            }
+          }).catch(onError).finally(() => inFlightCodes.delete(code));
+          continue;
         } else {
           const now = Date.now();
           if (lastError === callback.url && now - lastErrorAt < 2000) continue;
@@ -87,7 +94,7 @@ const authSubscription = createDesktopAuthSubscription({
   onOpenUrl: async handler => (await import('@tauri-apps/plugin-deep-link')).onOpenUrl(handler),
   getCurrent: async () => (await import('@tauri-apps/plugin-deep-link')).getCurrent(),
 });
-export function observeDesktopAuth(handler: (url: string) => void, onError?: (error: unknown) => void) {
+export function observeDesktopAuth(handler: (url: string) => void | boolean | Promise<void | boolean>, onError?: (error: unknown) => void) {
   return desktop ? authSubscription(handler, onError) : () => {};
 }
 

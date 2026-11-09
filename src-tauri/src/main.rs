@@ -1,3 +1,5 @@
+#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
+
 use tauri::{Manager, WebviewWindowBuilder};
 use tauri_plugin_deep_link::DeepLinkExt;
 

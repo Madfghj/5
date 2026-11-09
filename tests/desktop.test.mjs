@@ -13,6 +13,7 @@ test('desktop PKCE matches RFC 7636 S256 without relying on secure-context Subtl
 
 test('desktop auth accepts only the exact registered return URL and a single valid callback value', () => {
   assert.equal(desktopAuthCallback(callback('a')).code, 'a'.repeat(43));
+  assert.equal(desktopAuthCallback(callback('a').replace('://auth#', '://auth/#')).code, 'a'.repeat(43));
   assert.equal(desktopAuthCallback('space.opencalendar.app://auth#auth_error=authorization_cancelled').error, 'authorization_cancelled');
   for (const value of [
     `https://auth#auth_code=${'a'.repeat(43)}`,
@@ -54,9 +55,30 @@ test('live auth listener precedes cold read and deduplicates hot/cold callbacks 
   const next = [], stopNext = subscribe(url => next.push(url));
   await tick();
   for (const handler of handlers) handler([callback('a'), callback('b')]);
+  await tick();
   assert.deepEqual(next, [callback('b')]);
   assert.equal(calls.filter(value => value === 'cold').length, 1);
   stopNext(); assert.equal(handlers.size, 0);
+});
+
+test('a failed legacy exchange can accept the callback again but a completed exchange cannot', async () => {
+  let deliver, exchanges = 0;
+  const subscribe = createDesktopAuthSubscription({
+    onOpenUrl: async handler => { deliver = handler; return () => {}; },
+    getCurrent: async () => null,
+  });
+  const stop = subscribe(async () => ++exchanges > 1);
+  await tick();
+  deliver([callback('a'), callback('a')]);
+  await tick();
+  assert.equal(exchanges, 1);
+  deliver([callback('a')]);
+  await tick();
+  assert.equal(exchanges, 2);
+  deliver([callback('a')]);
+  await tick();
+  assert.equal(exchanges, 2);
+  stop();
 });
 
 test('React effect cleanup during cold read does not lose the launch callback for the replacement listener', async () => {

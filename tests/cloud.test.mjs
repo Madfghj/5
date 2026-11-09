@@ -23,6 +23,7 @@ function fixture(t, extra = {}) {
   db.exec(readFileSync(new URL('../drizzle/0001_availability.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../drizzle/0002_presence.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../drizzle/0003_customization.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../drizzle/0004_desktop_oauth.sql', import.meta.url), 'utf8'));
   t.after(() => db.close());
   const env = { DB: d1Adapter(db), PUBLIC_URL: 'https://calendar.test', CLIENT_URL: 'https://calendar.test', ...extra };
   let handler = createHandler(env);
@@ -248,6 +249,145 @@ test('cloud real signed OIDC claims require the original app verifier before an 
   assert.deepEqual(peerState.user.connectedProviders, []);
   assert.ok(peerState.groups[0].members.every((member) => !('connectedProviders' in member) && !('subject' in member) && !('email' in member)));
   assert.doesNotMatch(JSON.stringify(peerState), /google|private-subject|private-internal-id|example\.test/);
+});
+
+test('cloud desktop Telegram verifies the browser code before issuing a single PKCE-bound session', async (t) => {
+  const f = fixture(t, { TELEGRAM_CLIENT_ID: 'desktop-client', TELEGRAM_CLIENT_SECRET: 'desktop-test-secret' });
+  const owner = await f.user('<Owner & partner>', 'ru');
+  const { privateKey, publicKey } = await generateKeyPair('RS256');
+  const jwk = { ...await exportJWK(publicKey), kid: 'desktop-cloud-test', alg: 'RS256' };
+  let idToken;
+  let pauseTokenFetch;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    if (String(input) === 'https://oauth.telegram.org/token') {
+      assert.equal(init.headers.Authorization, 'Basic ' + Buffer.from('desktop-client:desktop-test-secret').toString('base64'));
+      if (pauseTokenFetch) await pauseTokenFetch();
+      return Response.json({ id_token: idToken });
+    }
+    if (String(input) === 'https://oauth.telegram.org/.well-known/jwks.json') return Response.json({ keys: [jwk] });
+    throw new Error('Unexpected OAuth fetch');
+  };
+  t.after(() => { globalThis.fetch = realFetch; });
+  const digest = (value, encoding = 'base64url') => createHash('sha256').update(value).digest(encoding);
+  const count = (table) => f.db.prepare('SELECT COUNT(*) n FROM ' + table).get().n;
+  const post = (path, body, extra = {}) => f.request(path, { method: 'POST', body, ...extra });
+  async function start() {
+    const proof = { pollToken: randomBytes(32).toString('base64url'), codeVerifier: randomBytes(32).toString('base64url') };
+    const request = { codeChallenge: digest(proof.codeVerifier), desktopPollHash: digest(proof.pollToken), returnTo: 'space.opencalendar.app://auth', locale: 'ru' };
+    const started = await post('/auth/telegram/start', request, { token: owner.token, headers: { Origin: 'http://tauri.localhost' } });
+    assert.equal(started.status, 200);
+    assert.match(started.body.verificationCode, /^[0-9]{6}$/);
+    assert.ok(started.body.expiresAt > Date.now());
+    assert.equal((await post('/auth/telegram/start', request, { token: owner.token })).body.code, 'desktop_handoff_exists');
+    const authorize = new URL(started.body.url);
+    assert.deepEqual([...authorize.searchParams.keys()], ['state', 'ticket']);
+    const opened = await f.request(authorize.pathname.slice(4) + authorize.search);
+    assert.equal(opened.status, 303);
+    const destination = new URL(opened.headers.get('Location'));
+    const state = destination.searchParams.get('state');
+    const nonce = destination.searchParams.get('nonce');
+    idToken = await new SignJWT({ nonce, name: '<Telegram user>' })
+      .setProtectedHeader({ alg: 'RS256', kid: jwk.kid })
+      .setSubject('desktop-person').setIssuer('https://oauth.telegram.org').setAudience('desktop-client')
+      .setIssuedAt().setExpirationTime('5m').sign(privateKey);
+    const callbackPath = '/auth/telegram/callback?state=' + state + '&code=provider-code';
+    const browser = { Cookie: opened.headers.get('Set-Cookie').split(';')[0] };
+    return { proof, code: started.body.verificationCode, callback: () => f.request(callbackPath, { headers: browser }) };
+  }
+  function browserForm(callback, code) {
+    assert.equal(callback.status, 200);
+    assert.equal(callback.headers.get('Location'), null);
+    assert.equal(callback.headers.get('Referrer-Policy'), 'origin');
+    assert.equal(callback.headers.get('Cache-Control'), 'no-store');
+    assert.match(callback.headers.get('Content-Security-Policy'), /form-action 'self'/);
+    assert.match(callback.body, /&lt;Telegram user&gt;|&lt;Owner &amp; partner&gt;/);
+    assert.doesNotMatch(callback.body, /<Telegram user>|<Owner & partner>|space\.opencalendar\.app:\/\//);
+    const cookie = callback.headers.getSetCookie().find(value => value.startsWith('oc_desktop_'));
+    assert.match(cookie, /Path=\/api\/auth\/desktop\/confirm; Max-Age=300; HttpOnly; SameSite=Strict; Secure$/);
+    const csrf = callback.body.match(/name="csrf" value="([A-Za-z0-9_-]{43})"/)[1];
+    const flowId = callback.body.match(/name="flowId" value="([a-f0-9]{64})"/)[1];
+    assert.doesNotMatch(callback.body, /name="code"[^>]*\bvalue=/);
+    return (fields = {}, headers = {}) => f.request('/auth/desktop/confirm', {
+      method: 'POST',
+      headers: { Cookie: cookie.split(';')[0], Origin: 'https://calendar.test', 'Content-Type': 'application/x-www-form-urlencoded', ...headers },
+      raw: new URLSearchParams({ csrf, flowId, code, decision: 'confirm', ...fields }),
+    });
+  }
+  const flow = await start();
+  const status = (proof = flow.proof) => post('/auth/desktop/status', proof);
+  const exchange = (proof = flow.proof) => post('/auth/exchange', { code: proof.pollToken, codeVerifier: proof.codeVerifier });
+  assert.equal((await status()).body.status, 'pending');
+  assert.equal((await status({ ...flow.proof, codeVerifier: randomBytes(32).toString('base64url') })).body.code, 'invalid_exchange_verifier');
+  const callback = await flow.callback();
+  assert.equal(callback.body.includes(flow.proof.pollToken), false);
+  assert.equal(callback.body.includes(flow.proof.codeVerifier), false);
+  assert.equal(callback.body.includes(idToken), false);
+  const confirm = browserForm(callback, flow.code);
+  assert.equal((await flow.callback()).body.code, 'invalid_oauth_state');
+  f.restart();
+  assert.equal((await status()).body.status, 'confirm');
+  assert.equal((await exchange()).body.code, 'invalid_exchange_code');
+  assert.equal(count('identities'), 0);
+  assert.equal((await confirm({}, { Cookie: '' })).status, 400);
+  assert.equal((await confirm({ csrf: randomBytes(32).toString('base64url') })).status, 400);
+  assert.equal((await confirm({}, { Origin: 'http://tauri.localhost' })).status, 400);
+  const wrongCode = flow.code === '000000' ? '000001' : '000000';
+  const rejected = await confirm({ code: wrongCode });
+  assert.equal(rejected.status, 400);
+  assert.match(rejected.body, /Неверный код/);
+  assert.equal((await status()).body.status, 'confirm');
+  const confirmed = await confirm();
+  assert.equal(confirmed.status, 200);
+  assert.match(confirmed.body, /Вход подтверждён/);
+  assert.match(confirmed.headers.get('Set-Cookie'), /Max-Age=0/);
+  assert.equal((await confirm()).status, 400);
+  assert.equal((await status()).body.status, 'ready');
+  assert.equal(count('identities'), 0);
+  const exchanges = await Promise.all([exchange(), exchange()]);
+  assert.deepEqual(exchanges.map(result => result.status).sort(), [200, 401]);
+  const signedIn = exchanges.find(result => result.status === 200);
+  assert.equal(signedIn.body.user.id, owner.user.id);
+  assert.deepEqual(signedIn.body.user.connectedProviders, ['telegram']);
+  assert.equal(count('identities'), 1);
+  assert.equal((await post('/auth/desktop/cancel', flow.proof)).body.code, 'oauth_already_consumed');
+
+  const denied = await start();
+  const denyForm = browserForm(await denied.callback(), denied.code);
+  assert.equal((await denyForm({ decision: 'deny', code: '' })).status, 200);
+  assert.equal((await status(denied.proof)).body.status, 'cancelled');
+  assert.equal((await exchange(denied.proof)).status, 401);
+
+  const blocked = await start();
+  const blockedForm = browserForm(await blocked.callback(), blocked.code);
+  for (let attempt = 0; attempt < 5; attempt++) assert.equal((await blockedForm({ code: blocked.code === '000000' ? '000001' : '000000' })).status, 400);
+  assert.equal((await status(blocked.proof)).body.error, 'invalid_desktop_verification_code');
+  assert.equal((await blockedForm()).status, 400);
+  assert.equal((await exchange(blocked.proof)).status, 401);
+  assert.equal(f.db.prepare('SELECT verified_record FROM oauth_desktop_handoffs WHERE poll_hash=?').get(digest(blocked.proof.pollToken, 'hex')).verified_record, null);
+
+  const cancelled = await start();
+  const cancelledForm = browserForm(await cancelled.callback(), cancelled.code);
+  assert.equal((await cancelledForm()).status, 200);
+  assert.equal((await post('/auth/desktop/cancel', cancelled.proof)).body.status, 'cancelled');
+  assert.equal((await exchange(cancelled.proof)).status, 401);
+
+  const inFlight = await start();
+  let releaseProvider, notifyProvider;
+  const providerReached = new Promise(resolve => { notifyProvider = resolve; });
+  const providerWait = new Promise(resolve => { releaseProvider = resolve; });
+  pauseTokenFetch = () => { notifyProvider(); return providerWait; };
+  const callbackRequest = inFlight.callback();
+  try {
+    await providerReached;
+    assert.equal((await post('/auth/desktop/cancel', inFlight.proof)).body.status, 'cancelled');
+  } finally {
+    releaseProvider();
+  }
+  assert.match((await callbackRequest).body, /Вход отменён/);
+  assert.equal((await status(inFlight.proof)).body.status, 'cancelled');
+  assert.equal(count('oauth_exchanges'), 0);
+  assert.equal(count('identities'), 1);
 });
 
 test('cloud day availability is member-only, attributed from the bearer and upserted per person and day', async (t) => {

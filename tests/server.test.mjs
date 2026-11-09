@@ -422,6 +422,129 @@ test('OIDC verifies actual signed ID tokens, links a guest, rejects nonce mismat
   assert.doesNotMatch(JSON.stringify(peerState), /google|private-subject|private-internal-id/);
 });
 
+test('desktop OAuth waits for browser code and app proof before creating a session', async (t) => {
+  const publicOrigin = 'https://calendar.test';
+  const f = await fixture(t, { env: { PUBLIC_URL: publicOrigin, GOOGLE_CLIENT_ID: 'desktop-test-client', GOOGLE_CLIENT_SECRET: 'test-secret' } });
+  const account = await f.user('<Owner>');
+  const { privateKey, publicKey } = await generateKeyPair('RS256');
+  const jwk = { ...await exportJWK(publicKey), kid: 'desktop-test-key', use: 'sig', alg: 'RS256' };
+  const originalFetch = globalThis.fetch;
+  let token, blockTokenResponse;
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    if (String(input) === 'https://oauth2.googleapis.com/token') {
+      if (blockTokenResponse) await blockTokenResponse();
+      return Response.json({ id_token: token });
+    }
+    if (String(input) === 'https://www.googleapis.com/oauth2/v3/certs') return Response.json({ keys: [jwk] });
+    return originalFetch(input, init);
+  });
+  const start = async (subject) => {
+    const pollToken = randomBytes(32).toString('base64url');
+    const desktopPollHash = createHash('sha256').update(pollToken).digest('base64url');
+    const response = await f.request('/auth/google/start', {
+      token: account.token,
+      method: 'POST',
+      body: { returnTo: 'space.opencalendar.app://auth', codeChallenge: clientChallenge, desktopPollHash, locale: 'ru' },
+    });
+    assert.equal(response.status, 200);
+    const { verificationCode, expiresAt } = response.body;
+    assert.match(verificationCode, /^\d{6}$/);
+    assert.ok(expiresAt > Date.now());
+    assert.deepEqual(Object.keys(response.body).sort(), ['expiresAt', 'url', 'verificationCode']);
+    const authorize = new URL(response.body.url);
+    assert.deepEqual([...authorize.searchParams.keys()].sort(), ['state', 'ticket']);
+    const browser = await fetch(`${f.base}${authorize.pathname}${authorize.search}`, { redirect: 'manual' });
+    assert.equal(browser.status, 303);
+    const provider = new URL(browser.headers.get('location'));
+    token = await new SignJWT({ nonce: provider.searchParams.get('nonce'), name: '<Google Name>' })
+      .setProtectedHeader({ alg: 'RS256', kid: jwk.kid }).setIssuer('https://accounts.google.com')
+      .setAudience('desktop-test-client').setSubject(subject).setIssuedAt().setExpirationTime('5m').sign(privateKey);
+    const callback = () => fetch(`${f.base}/api/auth/google/callback?state=${provider.searchParams.get('state')}&code=provider-code`, {
+      redirect: 'manual',
+      headers: { Cookie: browser.headers.getSetCookie()[0].split(';')[0] },
+    });
+    const proof = { pollToken, codeVerifier: clientVerifier };
+    return { verificationCode, callback, proof };
+  };
+  const status = (proof) => f.request('/auth/desktop/status', { method: 'POST', body: proof });
+  const cancel = (proof) => f.request('/auth/desktop/cancel', { method: 'POST', body: proof });
+  const exchange = ({ pollToken, codeVerifier }) => f.request('/auth/exchange', { method: 'POST', body: { code: pollToken, codeVerifier } });
+  const wrongVerifier = randomBytes(32).toString('base64url');
+  const readConfirmation = async (response) => {
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('location'), null);
+    const cookie = response.headers.getSetCookie().find((value) => value.startsWith('oc_desktop_'));
+    assert.match(cookie, /Path=\/api\/auth\/desktop\/confirm/);
+    assert.match(cookie, /HttpOnly; SameSite=Strict; Secure/);
+    assert.equal(response.headers.get('referrer-policy'), 'origin');
+    const html = await response.text();
+    assert.match(html, /<html lang="ru">/);
+    assert.match(html, /&lt;Google Name&gt;/);
+    assert.match(html, /&lt;Owner&gt;/);
+    assert.doesNotMatch(html, /<Google Name>|<Owner>|provider-code|auth_code|pollToken/);
+    return {
+      cookie: cookie.split(';')[0],
+      flowId: html.match(/name="flowId" value="([0-9a-f]{64})"/)?.[1],
+      csrf: html.match(/name="csrf" value="([A-Za-z0-9_-]{43})"/)?.[1],
+    };
+  };
+  const submit = ({ cookie, flowId, csrf }, code, origin = publicOrigin) => fetch(`${f.base}/api/auth/desktop/confirm`, {
+    method: 'POST', headers: { Cookie: cookie, Origin: origin }, body: new URLSearchParams({ flowId, csrf, code, decision: 'confirm' }),
+  });
+  const identityCount = () => f.db.prepare('SELECT COUNT(*) AS count FROM identities').get().count;
+
+  const first = await start('google-desktop-subject');
+  assert.equal((await status(first.proof)).body.status, 'pending');
+  assert.equal((await status({ ...first.proof, codeVerifier: wrongVerifier })).status, 401);
+  const browser = await readConfirmation(await first.callback());
+  assert.equal((await status(first.proof)).body.status, 'confirm');
+  assert.equal((await exchange(first.proof)).status, 401, 'verified provider identity does not finish desktop sign-in');
+  assert.equal((await submit(browser, first.verificationCode, 'https://attacker.example')).status, 403);
+  assert.equal((await submit({ ...browser, cookie: '' }, first.verificationCode)).status, 400);
+  assert.equal((await submit({ ...browser, csrf: randomBytes(32).toString('base64url') }, first.verificationCode)).status, 400);
+  const wrongCode = first.verificationCode === '000000' ? '000001' : '000000';
+  assert.equal((await submit(browser, wrongCode)).status, 400);
+  assert.equal(identityCount(), 0);
+  const confirmed = await submit(browser, first.verificationCode);
+  assert.equal(confirmed.status, 200);
+  assert.ok(confirmed.headers.getSetCookie().some((value) => /Max-Age=0/.test(value)));
+  assert.equal((await status(first.proof)).body.status, 'ready');
+  assert.equal(identityCount(), 0, 'browser confirmation does not link the provider by itself');
+  assert.equal((await exchange({ ...first.proof, codeVerifier: wrongVerifier })).status, 401);
+  const signedIn = await exchange(first.proof);
+  assert.equal(signedIn.status, 200);
+  assert.equal(signedIn.body.user.id, account.user.id);
+  assert.deepEqual(signedIn.body.user.connectedProviders, ['google']);
+  assert.equal((await exchange(first.proof)).status, 401);
+  assert.equal((await submit(browser, first.verificationCode)).status, 400);
+  assert.equal((await cancel(first.proof)).body.code, 'oauth_already_consumed');
+
+  const locked = await start('google-locked-subject');
+  const lockPage = await readConfirmation(await locked.callback());
+  const bad = locked.verificationCode === '000000' ? '000001' : '000000';
+  for (let attempt = 0; attempt < 5; attempt++) assert.equal((await submit(lockPage, bad)).status, 400);
+  const lockedStatus = await status(locked.proof);
+  assert.equal(lockedStatus.body.status, 'error');
+  assert.equal(lockedStatus.body.error, 'invalid_desktop_verification_code');
+  assert.equal((await submit(lockPage, locked.verificationCode)).status, 400);
+  assert.equal((await exchange(locked.proof)).status, 401);
+
+  const interrupted = await start('google-cancelled-subject');
+  let tokenRequested, releaseTokenResponse;
+  const entered = new Promise((resolve) => { tokenRequested = resolve; });
+  const waiting = new Promise((resolve) => { releaseTokenResponse = resolve; });
+  blockTokenResponse = () => { tokenRequested(); return waiting; };
+  const callback = interrupted.callback();
+  await entered;
+  const cancelled = await cancel(interrupted.proof);
+  releaseTokenResponse();
+  assert.equal(cancelled.body.status, 'cancelled');
+  assert.doesNotMatch(await (await callback).text(), /<form/);
+  assert.equal((await status(interrupted.proof)).body.status, 'cancelled');
+  assert.equal((await exchange(interrupted.proof)).status, 401);
+  assert.equal(identityCount(), 1, 'only the explicitly confirmed and redeemed identity was linked');
+});
+
 test('production serves built assets and SPA index while API misses stay JSON', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'oc-static-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
